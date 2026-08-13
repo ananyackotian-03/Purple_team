@@ -1,0 +1,14 @@
+version: "3.8"
+services:
+  sentinelforge-target:
+    build: .
+    container_name: sentinelforge-target
+    command: ["sleep", "infinity"]
+    user: labuser
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
