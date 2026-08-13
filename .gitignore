@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.env
+.venv/
+venv/
+*.db
+setup_code.py
+setup_phase2.py
