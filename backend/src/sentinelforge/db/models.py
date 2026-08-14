@@ -82,8 +82,29 @@ class RetestResult(Base):
     __tablename__ = 'retest_results'
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     organization_id = Column(UUID(as_uuid=True), ForeignKey('organizations.id'), nullable=False)
-    exercise_id = Column(UUID(as_uuid=True), ForeignKey('exercises.id'), nullable=False)
+    exercise_id = Column(UUID(as_uuid=True), ForeignKey('exercises.id'), nullable=True)
+    scenario_id = Column(UUID(as_uuid=True), nullable=True)
+    before_outcome = Column(String, nullable=True)
+    after_outcome = Column(String, nullable=True)
     detection_improved = Column(String, nullable=False)
+    validated_rule_ids = Column(Text, nullable=True)
+    evaluated_at = Column(DateTime, default=datetime.utcnow)
+
+class DetectionGapRecord(Base):
+    __tablename__ = 'detection_gaps'
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id = Column(UUID(as_uuid=True), ForeignKey('organizations.id'), nullable=False)
+    scenario_id = Column(UUID(as_uuid=True), nullable=False)
+    action_id = Column(UUID(as_uuid=True), nullable=False)
+    technique_id = Column(String, nullable=False)
+    original_outcome = Column(String, nullable=False)
+    evidence_event_ids = Column(Text, nullable=True)
+    matched_rule_ids = Column(Text, nullable=True)
+    root_cause = Column(String, nullable=False)
+    reason = Column(Text, nullable=False)
+    remediation_status = Column(String, nullable=False, default="OPEN")
+    retest_id = Column(UUID(as_uuid=True), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 class AuditLog(Base):
     __tablename__ = 'audit_logs'

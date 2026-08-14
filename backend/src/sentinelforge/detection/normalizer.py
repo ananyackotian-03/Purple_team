@@ -10,6 +10,7 @@ SECURITY: All telemetry strings are UNTRUSTED DATA.
 import hashlib
 import json
 import logging
+import unicodedata
 import uuid
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
@@ -148,9 +149,16 @@ class TelemetryNormalizer:
         )
 
     def _sanitize_string(self, value: str) -> str:
-        """Strip null bytes, control characters, and enforce length limit."""
+        """Strip null bytes, control characters, enforce NFC normalization, and length limit.
+        
+        NOTE: NFC normalization standardizes Unicode codepoints (e.g. combined accents).
+        It does NOT convert or eliminate cross-script homoglyphs/confusables (e.g. Latin 'a' vs Cyrillic 'а').
+        Exact-match authorization and strict schema validation remain the authoritative security controls.
+        """
         # Remove null bytes
         value = value.replace("\x00", "")
+        # Apply canonical Unicode NFC normalization
+        value = unicodedata.normalize("NFC", value)
         # Remove other dangerous control characters (keep newlines/tabs)
         value = "".join(
             ch for ch in value

@@ -7,3 +7,5 @@ RUN apt-get update && apt-get install -y --no-install-recommends bash coreutils 
 
 # Add labuser
 RUN useradd -m -s /bin/bash labuser
+
+USER labuser

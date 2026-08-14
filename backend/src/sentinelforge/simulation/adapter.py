@@ -62,8 +62,22 @@ class ContainerLinuxAdapter(SimulationAdapter):
         )
 
     def cleanup(self) -> None:
-        # For container target, reset /tmp or container state if needed
-        pass
+        """Mandatory post-experiment reset/cleanup semantics for container target.
+        
+        Executes bounded cleanup of temporary evidence/artifacts inside the container
+        under unprivileged 'labuser' without creating host-level secondary execution pathways.
+        """
+        try:
+            if self.health_check():
+                self._docker.execute_bounded(
+                    executable="/usr/bin/bash",
+                    arguments=["-c", "rm -rf /tmp/sentinelforge_* 2>/dev/null || true"],
+                    run_as_user="labuser",
+                    timeout=10,
+                )
+        except Exception:
+            # Cleanup is best-effort and must fail-safe without breaking worker flow
+            pass
 
     def health_check(self) -> bool:
         try:

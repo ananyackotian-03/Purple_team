@@ -67,6 +67,7 @@ class BlueAgentAnalyst:
         self,
         scenario_outcome: ScenarioDetectionOutcome,
         actions: Optional[List[ActionIR]] = None,
+        db_session=None,
     ) -> List[GapAnalysisResult]:
         """Analyze a ScenarioDetectionOutcome and produce structured GapAnalysisResult objects."""
         results: List[GapAnalysisResult] = []
@@ -106,18 +107,37 @@ class BlueAgentAnalyst:
                 root_cause = "INSUFFICIENT_RULE_COVERAGE"
                 reason = f"Incomplete detection rule coverage for technique {tech_id}"
 
-            results.append(
-                GapAnalysisResult(
-                    scenario_id=str(scenario_outcome.scenario_id),
-                    action_id=action_id_str,
-                    technique_id=tech_id,
-                    original_outcome=outcome_str,
-                    evidence_event_ids=[str(e) for e in act_outcome.evidence_event_ids],
-                    matched_rule_ids=[str(m) for m in act_outcome.matched_rule_ids],
-                    root_cause=root_cause,
-                    reason=reason,
-                )
+            gap_res = GapAnalysisResult(
+                scenario_id=str(scenario_outcome.scenario_id),
+                action_id=action_id_str,
+                technique_id=tech_id,
+                original_outcome=outcome_str,
+                evidence_event_ids=[str(e) for e in act_outcome.evidence_event_ids],
+                matched_rule_ids=[str(m) for m in act_outcome.matched_rule_ids],
+                root_cause=root_cause,
+                reason=reason,
             )
+            results.append(gap_res)
+
+            if db_session:
+                import json as json_lib
+                from sentinelforge.db.models import DetectionGapRecord
+                org_uuid = UUID(str(scenario_outcome.organization_id)) if scenario_outcome.organization_id else UUID(int=0)
+                rec = DetectionGapRecord(
+                    id=UUID(gap_res.gap_id),
+                    organization_id=org_uuid,
+                    scenario_id=UUID(gap_res.scenario_id),
+                    action_id=UUID(gap_res.action_id),
+                    technique_id=gap_res.technique_id,
+                    original_outcome=gap_res.original_outcome,
+                    evidence_event_ids=json_lib.dumps(gap_res.evidence_event_ids),
+                    matched_rule_ids=json_lib.dumps(gap_res.matched_rule_ids),
+                    root_cause=gap_res.root_cause,
+                    reason=gap_res.reason,
+                    remediation_status="OPEN",
+                )
+                db_session.add(rec)
+                db_session.commit()
 
         return results
 

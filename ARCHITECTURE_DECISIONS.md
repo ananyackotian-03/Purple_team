@@ -50,3 +50,19 @@
 **Context**: External `pySigma` and `sigma-rule-matcher` AST translation libraries may not be available or fully compatible in all execution environments.
 **Decision**: `SigmaEngine` integrates `pySigma` when available and falls back to a built-in deterministic field-matcher.
 **Rationale**: Ensures telemetry detection remains reliable without hard external dependency blocks.
+
+## ADR-012: Formal Execution Constraints in ActionIR Schema
+**Context**: Execution limits (`max_execution_seconds`, `max_stdout_bytes`) were passed dynamically from `RedAgentPlanner` to `ActionIR` without formal Pydantic schema declarations.
+**Decision**: Formally declare `max_execution_seconds` (default: 30s, ge: 1, le: 300) and `max_stdout_bytes` (default: 64KB, ge: 1024, le: 1MB) as explicit `ActionIR` model attributes.
+**Rationale**: Guarantees boundary parameters are validated, typed, and signed deterministically.
+
+## ADR-013: Unicode NFC Canonicalization & Homoglyph Security Invariant
+**Context**: Untrusted telemetry strings require sanitization. Previous documentation incorrectly suggested NFC normalization prevents homoglyph attacks.
+**Decision**: `TelemetryNormalizer` applies `unicodedata.normalize('NFC', value)` to canonicalize combined Unicode codepoints.
+**Security Invariant**: NFC normalization standardizes string encoding but **does NOT convert cross-script homoglyphs/confusables** (e.g. Latin 'a' `U+0061` vs Cyrillic 'а' `U+0430`). Security authorization relies strictly on exact-match allowlists, canonical binary paths, and structured schemas.
+
+## ADR-014: Durable Detection Gap & Policy Decision Persistence
+**Context**: Telemetry detection gaps and safety boundary decisions must establish an auditable evidence chain for remediation and retesting.
+**Decision**: Introduce `DetectionGapRecord` (table `detection_gaps`) and wire `PolicyDecisionRecord` (table `policy_decisions`) persistence in the database with Alembic migration version `001_reconciliation_schema_update`.
+**Rationale**: Ensures gap analysis, rule generation, and verification history persist across worker and service restarts.
+

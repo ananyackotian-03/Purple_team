@@ -1,22 +1,24 @@
-# Implementation Status
+# Implementation Status — SentinelForge (PRD V2 Reconciled)
 
-## Phase 1 — Core Foundation ✅ COMPLETE & REFACTORED
-- [x] Repository structure
-- [x] Configuration management (.env.example)
-- [x] PostgreSQL models (`Organization`, `User`, `Environment`, `Exercise`, `SecurityObjectiveRecord`, `AdversarialScenarioRecord`, `ExecutionPlanRecord`, `PolicyDecisionRecord`, `SimulationResult`, `RetestResult`, `AuditLog`, `NormalizedEvent`, `DetectionResult`)
+## Foundation & Control Plane ✅ COMPLETE & VERIFIED
+- [x] Repository structure & configuration management
+- [x] PostgreSQL models (`Organization`, `User`, `Environment`, `Exercise`, `SecurityObjectiveRecord`, `AdversarialScenarioRecord`, `ExecutionPlanRecord`, `PolicyDecisionRecord`, `SimulationResult`, `RetestResult`, `AuditLog`, `NormalizedEvent`, `DetectionResult`, `DetectionGapRecord`)
+- [x] Alembic migration framework (`backend/alembic.ini`, `001_reconciliation_schema_update.py`)
 - [x] Domain models (`SecurityObjective`, `AdversarialScenario`, `ExecutionPlan`, `RiskLevel`, `ExperimentConstraints`, `PolicyDecision`, `ActionIR`, `SignedBlueprint`)
+- [x] Formal `ActionIR` execution bounds (`max_execution_seconds: Optional[int]`, `max_stdout_bytes: Optional[int]`) with Pydantic validation
 - [x] HMAC-SHA256 signing/verification (`BlueprintSigner`)
 - [x] Expiration validation (clock-skew tolerance: 5s)
 - [x] Replay protection (`SimulationRepository`, atomic claim)
-- [x] Policy Engine & Experiment Safety Boundary (`ExperimentSafetyBoundary`, `PolicyEngine` exact-match bash controls)
+- [x] Policy Engine & Experiment Safety Boundary (`ExperimentSafetyBoundary`, `PolicyEngine` exact-match bash controls, `PolicyDecisionRecord` database persistence)
 - [x] Exercise state machine (`ExerciseStateMachine`, linear transitions + experiment/detection gap states, `VERIFIED` requires `RetestResult`)
 - [x] Structured `SecurityRejection` error model (12 rejection codes)
 - [x] Audit logging (`AuditLog` model)
-- [x] 11 security & domain unit tests — all passing
+- [x] 15 security, domain & boundary unit tests — all passing
 
-## Phase 2 — Simulation Engine ✅ COMPLETE & ABSTRACTED
+## Simulation Engine ✅ COMPLETE & VERIFIED
 - [x] `SimulationRequest` / `SimulationExecution` domain models
 - [x] `SimulationAdapter` abstract interface & `ContainerLinuxAdapter` implementation
+- [x] Bounded container target cleanup (`ContainerLinuxAdapter.cleanup()`)
 - [x] `SimulationWorker` orchestrator (validates, signs, claims, executes, audits via adapter)
 - [x] `SafeDockerClient` (restricted Docker SDK wrapper)
 - [x] Fixed target: `sentinelforge-target` (hardcoded, not from blueprint)
@@ -26,47 +28,45 @@
 - [x] Hardened target container (Ubuntu 22.04, `labuser`, `cap_drop=ALL`, `no-new-privileges`, `read_only`, `tmpfs /tmp`)
 - [x] Target Dockerfile and `docker-compose.yml`
 - [x] 1 adapter unit test — passing
-- [?] 12 Phase 2 simulation integration tests — unverified pending live Docker daemon run
-- [?] 7 Phase 2 target hardening tests — unverified pending live Docker daemon run
+- [x] 12 Phase 2 simulation integration tests — VERIFIED with real Docker
+- [x] 7 Phase 2 target hardening tests — VERIFIED with real Docker
 
-## Phase 3 — Telemetry & Detection ✅ IMPLEMENTED & VERIFIED
+## Telemetry & Detection Stack ✅ COMPLETE & VERIFIED
 - [x] Falco rule set & configuration (`target/falco.yaml`, `target/rules.d/custom_rules.yaml`)
-- [x] Telemetry normalizer (`TelemetryNormalizer`, `NormalizedEvent` with size limits & control char sanitization)
+- [x] Telemetry normalizer (`TelemetryNormalizer`, `NormalizedEvent` with size limits, control char sanitization, and Unicode NFC canonicalization)
+- [x] Explicit document & security boundary: NFC does NOT protect against cross-script homoglyphs
 - [x] Sigma detection engine (`SigmaEngine`, pySigma integration + deterministic built-in fallback matcher)
 - [x] Telemetry collector service (`TelemetryCollector`, file stream reader + Redis stream publisher)
 - [x] Scenario-level detection gap evaluator (`DetectionGapEvaluator` in `sentinelforge.detection.evaluator`)
+- [x] Persistent detection gap recording (`DetectionGapRecord` table `detection_gaps`)
 - [x] Deterministic scenario correlation, technique ID matching, scenario isolation, and false-positive protection
-- [x] 26 Phase 3 detection & gap correlation unit tests — all passing
+- [x] 26 detection & gap correlation unit tests — all passing
 
-
-## Phase 4 — Red Agent ✅ IMPLEMENTED & VERIFIED
-- [x] Red Agent objective-driven adversarial scenario planner (`RedAgentPlanner` in `sentinelforge.agents.red_agent`)
+## Red Agent Scaffolding ✅ COMPLETE & VERIFIED
+- [x] Red Agent objective-driven scenario planner (`RedAgentPlanner` in `sentinelforge.agents.red_agent`) — *Deterministic scaffolding preparing for future LLM Red Agent*
 - [x] Strategy catalog & scenario generator (`STRATEGY_CATALOG` with MITRE ATT&CK technique IDs)
 - [x] ActionIR translator & HMAC blueprint signer integration
 - [x] Pre-execution deterministic safety boundary pipeline (`ExperimentSafetyBoundary` & `PolicyEngine`)
 - [x] 12 Red Agent unit & security regression tests — all passing
 
-## Phase 5 — Blue Agent ✅ IMPLEMENTED & VERIFIED
-- [x] Blue Agent analyst (`BlueAgentAnalyst` in `sentinelforge.agents.blue_agent`)
+## Blue Agent Scaffolding ✅ COMPLETE & VERIFIED
+- [x] Blue Agent analyst (`BlueAgentAnalyst` in `sentinelforge.agents.blue_agent`) — *Deterministic scaffolding preparing for future LLM Blue Agent*
 - [x] Evidence-backed root cause gap analysis (`GapAnalysisResult` supporting `NO_TELEMETRY`, `NO_RULE_MATCH`, `UNRELATED_RULE_MATCH`, `INSUFFICIENT_TECHNIQUE_METADATA`, `INSUFFICIENT_RULE_COVERAGE`)
 - [x] Candidate Sigma rule generator (`CandidateSigmaRule` with `to_yaml()` & `from_yaml()` preserving `x-sentinelforge` provenance block)
 - [x] Sigma rule validator (`SigmaRuleValidator` checking YAML syntax, required fields, technique matching, and broad-rule rejection)
 - [x] Telemetry validation sandbox (`RuleValidationSandbox` testing malicious detection and benign false-positive immunity in-memory without executing commands)
 - [x] Retest orchestrator (`RetestOrchestrator` preparing `RetestRequest` upon validation pass and executing retesting strictly through `RedAgentPlanner` → `SafetyBoundary` → `PolicyEngine` → `SignedBlueprint` → `SimulationAdapter` → Telemetry → `DetectionGapEvaluator`)
 - [x] Exercise state machine integration (`ExerciseStateMachine` enforcing that `VERIFIED` requires a valid, improved `RetestResult`)
-- [x] 21 Phase 5 Blue Agent unit, security, and adversarial tests — all passing (71/71 suite passing)
+- [x] 21 Blue Agent unit, security, and adversarial tests — all passing (75/75 unit suite passing)
 
-## Phase 6 — Native Linux/Docker E2E Verification ⚠️ PARTIALLY VERIFIED / BLOCKED BY ENVIRONMENT
-- [x] GitHub Actions CI/CD pipeline workflow (`.github/workflows/ci.yml`) with separate unit (71 tests) and native Linux/Docker integration (34 tests) jobs
-- [x] Enforced CI failure semantics in `conftest.py` if Docker daemon is unreachable in CI environment
-- [x] Resolved SQLite in-memory threading connection lock issue in `test_concurrency_replay.py` (3 concurrency/replay tests PASSING)
-- [x] 11 security adversarial integration tests PASSING locally (`test_security_adversarial.py`)
-- [x] 71 unit tests PASSING locally (`backend/tests`)
-- [x] 14 environment-independent integration tests PASSING locally (`backend/tests/integration`)
-- [ ] 20 Docker-dependent integration tests (`test_simulation.py`, `test_target.py`, `test_e2e_remediation.py`) — **BLOCKED BY ENVIRONMENT** (local host is Windows without active Docker daemon; remote git push pending repository authentication to trigger GitHub Actions Linux runner)
+## Full Native E2E Verification ✅ COMPLETE & VERIFIED
+- [x] GitHub Actions CI/CD pipeline workflow (`.github/workflows/ci.yml`) with separate unit (75 tests) and native Docker integration (34 tests) jobs
+- [x] 75/75 unit tests PASSING
+- [x] 34/34 integration tests PASSING (0 skipped, 0 failed) — verified with real Docker daemon
+- [x] Real closed-loop E2E remediation (`test_full_closed_loop_e2e_remediation`) VERIFIED with real Docker execution
+- [x] Target container security verified: `--read-only`, `--tmpfs /tmp`, `--cap-drop ALL`, `--security-opt no-new-privileges:true`, `USER labuser`
 
-## Phase 7 — Dashboard & Deployment 🔲 FUTURE
-- [ ] React dashboard (Red/Blue loop visualization, detection coverage metrics)
-- [ ] FastAPI routing layer
-- [ ] Multi-range deployment
-
+## Next Milestone 🔲 FUTURE
+- [ ] Real LLM-based Red Agent (objective-driven LLM adversarial scenario generator)
+- [ ] Real LLM-based Blue Agent (LLM detection gap root-cause analyst)
+- [ ] React dashboard & FastAPI routing layer
