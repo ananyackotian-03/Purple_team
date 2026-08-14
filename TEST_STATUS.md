@@ -8,10 +8,16 @@
 - **DetectionGapEvaluator & Scenario Correlator**: 17 passing
 - **Phase 4 Red Agent & Safety Pipeline**: 12 passing
 - **Phase 5 Blue Agent Analyst & Remediation Pipeline**: 21 passing
-- **Phase 2 Simulation Integration (Docker)**: 12 (unverified, requires active Docker daemon)
-- **Phase 2 Target Hardening Integration (Docker)**: 7 (unverified, requires active Docker daemon)
+- **Phase 6 Concurrency & Replay Atomicity Integration**: 3 passing
+- **Phase 6 Security Adversarial Integration**: 11 passing
+- **Phase 6 Target Container Hardening Integration (Docker)**: 7 (BLOCKED BY ENVIRONMENT locally, requires active Docker daemon)
+- **Phase 6 Simulation Worker Integration (Docker)**: 12 (BLOCKED BY ENVIRONMENT locally, requires active Docker daemon)
+- **Phase 6 Closed-Loop E2E Remediation Integration (Docker)**: 1 (BLOCKED BY ENVIRONMENT locally, requires active Docker daemon)
 
-**TOTAL VERIFIED AUTOMATED TESTS**: 71 passed, 0 failed, 0 skipped.
+**SUMMARY**:
+- **Unit & Security Tests**: **71 PASSED**, 0 failed, 0 skipped (**VERIFIED**)
+- **Non-Docker Integration Tests**: **14 PASSED**, 0 failed (**VERIFIED**)
+- **Docker-Dependent Integration Tests**: **20 SKIPPED** (due to local Windows host lacking Docker daemon; configured in CI `.github/workflows/ci.yml` for Ubuntu Linux runner) (**PARTIALLY VERIFIED / BLOCKED BY ENVIRONMENT**)
 
 ## Security & Architectural Boundaries Verified
 ✅ Tampered blueprints are rejected.

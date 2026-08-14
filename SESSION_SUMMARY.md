@@ -53,14 +53,20 @@ Adopted PRD V2 as the primary source of truth:
 - `ExerciseStateMachine`: Enforces that `VERIFIED` state strictly requires a valid, improved `RetestResult` (where before is failure, after is DETECTED, and detection_improved is True). Bare booleans and invalid RetestResults are strictly rejected.
 - 21 Blue Agent unit, security, and adversarial tests passing (`backend/tests/test_blue_agent.py`).
 
-## Verification Status
-- **Total Automated Unit Tests**: **71 passed**, 0 failed.
-  - `backend/tests/test_security.py`: 8 passed
-  - `backend/tests/test_experiment.py`: 3 passed
-  - `backend/tests/test_adapter.py`: 1 passed
-  - `backend/tests/detection/test_detection.py`: 9 passed
-  - `backend/tests/detection/test_gap_evaluator.py`: 17 passed
-  - `backend/tests/test_red_agent.py`: 12 passed
-  - `backend/tests/test_blue_agent.py`: 21 passed
+## Phase 6 Final Verification (PARTIALLY VERIFIED / BLOCKED BY ENVIRONMENT)
+- Built GitHub Actions CI pipeline (`.github/workflows/ci.yml`) featuring dedicated unit test job (71 tests) and native Linux/Docker integration job (34 tests) on `ubuntu-latest`.
+- Enforced strict failure criteria in `backend/tests/integration/conftest.py` so missing Docker daemon fails CI immediately rather than converting failures to skips.
+- Resolved SQLite connection thread contention in `test_concurrency_replay.py` using explicit thread locking for in-memory SQLite transactions.
+- Executed local baseline verification:
+  - Unit Test Suite: **71/71 PASSED** (0 failed, 0 skipped)
+  - Non-Docker Integration Suite: **14/14 PASSED** (3 concurrency/replay + 11 security adversarial tests)
+  - Docker Integration Suite: **20 SKIPPED** (due to local Windows host lacking Docker daemon)
+- Remote GitHub commit push attempted to trigger CI workflow (`origin master`). Remote repository push requires GitHub authentication credentials to complete live Docker execution on Ubuntu runner.
+
+## Verification Status Summary
+- **Unit & Security Tests**: **71 PASSED**, 0 failed, 0 skipped (**VERIFIED**)
+- **Non-Docker Integration Tests**: **14 PASSED**, 0 failed (**VERIFIED**)
+- **Docker Integration Tests**: **20 SKIPPED** (due to local Windows host lacking Docker daemon) (**PARTIALLY VERIFIED / BLOCKED BY ENVIRONMENT**)
+- **Phase 6 Overall Status**: **PARTIALLY VERIFIED** (Pending live Linux/Docker CI run on GitHub Actions)
 
 

@@ -56,7 +56,16 @@
 - [x] Exercise state machine integration (`ExerciseStateMachine` enforcing that `VERIFIED` requires a valid, improved `RetestResult`)
 - [x] 21 Phase 5 Blue Agent unit, security, and adversarial tests — all passing (71/71 suite passing)
 
-## Phase 6 — Dashboard & Deployment 🔲 FUTURE
+## Phase 6 — Native Linux/Docker E2E Verification ⚠️ PARTIALLY VERIFIED / BLOCKED BY ENVIRONMENT
+- [x] GitHub Actions CI/CD pipeline workflow (`.github/workflows/ci.yml`) with separate unit (71 tests) and native Linux/Docker integration (34 tests) jobs
+- [x] Enforced CI failure semantics in `conftest.py` if Docker daemon is unreachable in CI environment
+- [x] Resolved SQLite in-memory threading connection lock issue in `test_concurrency_replay.py` (3 concurrency/replay tests PASSING)
+- [x] 11 security adversarial integration tests PASSING locally (`test_security_adversarial.py`)
+- [x] 71 unit tests PASSING locally (`backend/tests`)
+- [x] 14 environment-independent integration tests PASSING locally (`backend/tests/integration`)
+- [ ] 20 Docker-dependent integration tests (`test_simulation.py`, `test_target.py`, `test_e2e_remediation.py`) — **BLOCKED BY ENVIRONMENT** (local host is Windows without active Docker daemon; remote git push pending repository authentication to trigger GitHub Actions Linux runner)
+
+## Phase 7 — Dashboard & Deployment 🔲 FUTURE
 - [ ] React dashboard (Red/Blue loop visualization, detection coverage metrics)
 - [ ] FastAPI routing layer
 - [ ] Multi-range deployment

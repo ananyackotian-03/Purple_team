@@ -13,10 +13,15 @@
    - Built `RetestOrchestrator` to execute authorized retests through existing `RedAgentPlanner` → `SafetyBoundary` → `PolicyEngine` → `SignedBlueprint` → `SimulationAdapter` → Telemetry → `DetectionGapEvaluator` architecture.
    - Updated `ExerciseStateMachine` to enforce that `VERIFIED` requires a valid, improved `RetestResult`.
 
-3. **Phase 6: Dashboard, API Routing & Multi-Range Deployment**:
+3. **Phase 6: Native Linux/Docker E2E CI Verification ⚠️ PARTIALLY VERIFIED**:
+   - Created GitHub Actions CI/CD pipeline workflow (`.github/workflows/ci.yml`) targeting Ubuntu Linux runner.
+   - Enforced `conftest.py` fail-on-missing-Docker policy in CI environment.
+   - Fixed SQLite in-memory threading connection lock issue in `test_concurrency_replay.py`.
+   - Verified 71 unit tests PASSED locally.
+   - Verified 14 non-Docker integration tests PASSED locally.
+   - Remaining: Push commit to remote GitHub repository once git credentials / repository access is authorized to execute live Docker E2E tests on GitHub Actions runner.
+
+4. **Phase 7: Dashboard, API Routing & Multi-Range Deployment**:
    - Build React dashboard for visual Red/Blue closed-loop simulation and detection coverage metrics.
    - Implement FastAPI web API routing layer.
-
-4. **Phase 2 Native Linux E2E Verification**:
-   - Run full Docker-dependent integration tests on native Linux environment with active Docker daemon.
 

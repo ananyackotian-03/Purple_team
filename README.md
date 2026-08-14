@@ -11,7 +11,7 @@ Evidence-Driven Autonomous Security Validation Platform.
 | **Phase 3** | ✅ COMPLETE | Telemetry collection, normalization, Falco rules, Sigma rule evaluation with built-in fallback, `DetectionGapEvaluator` |
 | **Phase 4** | ✅ COMPLETE | Red Agent: objective-driven adversarial scenario planner (`RedAgentPlanner`), MITRE ATT&CK strategy catalog |
 | **Phase 5** | ✅ COMPLETE | Blue Agent: `BlueAgentAnalyst` gap analysis, `CandidateSigmaRule` generation, `SigmaRuleValidator`, `RuleValidationSandbox`, `RetestOrchestrator` |
-| **Phase 6** | ✅ COMPLETE | Native Linux/Docker E2E integration test suite, adversarial security boundary testing, concurrency/replay atomicity, CI/CD pipeline |
+| **Phase 6** | ⚠️ PARTIALLY VERIFIED | GitHub Actions CI workflow configured (`.github/workflows/ci.yml`), 71 unit tests & 14 non-Docker integration tests passing; 20 Docker tests BLOCKED BY ENVIRONMENT locally (requires active Docker daemon on Linux runner) |
 
 ## Continuous Red ↔ Blue Loop (PRD V2 Vision)
 
