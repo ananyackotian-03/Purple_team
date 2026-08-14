@@ -5,18 +5,37 @@ from ..policy.engine import PolicyEngine
 from ..policy.signing import BlueprintSigner
 from .replay import SimulationRepository
 from .docker_client import SafeDockerClient
+from .adapter import SimulationAdapter, ContainerLinuxAdapter
 from ..db.models import AuditLog
 from ..domain.exceptions import SecurityRejection, SecurityRejectionCode
 
 class SimulationWorker:
-    def __init__(self, signer: BlueprintSigner, repo: SimulationRepository, db_session):
+    def __init__(
+        self,
+        signer: BlueprintSigner,
+        repo: SimulationRepository,
+        db_session,
+        adapter: SimulationAdapter | SafeDockerClient | None = None,
+    ):
         self.signer = signer
         self.repo = repo
         self.db = db_session
-        self.docker_client = SafeDockerClient()
+
+        if isinstance(adapter, SimulationAdapter):
+            self.adapter = adapter
+        elif isinstance(adapter, SafeDockerClient):
+            self.adapter = ContainerLinuxAdapter(docker_client=adapter)
+        else:
+            self.adapter = ContainerLinuxAdapter()
+
+        # Retain backward-compatible property reference
+        self.docker_client = (
+            self.adapter._docker
+            if isinstance(self.adapter, ContainerLinuxAdapter)
+            else None
+        )
         
     def _audit(self, action: str, bp_id: uuid.UUID = None):
-        # We need an org ID. For MVP just picking a zero UUID
         org_id = uuid.UUID(int=0)
         log = AuditLog(organization_id=org_id, action=action, blueprint_id=bp_id)
         self.db.add(log)
@@ -35,7 +54,6 @@ class SimulationWorker:
             if not self.signer.verify(bp):
                 raise SecurityRejection(SecurityRejectionCode.INVALID_SIGNATURE, "Signature mismatch")
                 
-            # Create IR for policy check
             from ..domain.action_ir import ActionIR, ActionType
             ir = ActionIR(
                 action_id=bp.action_id, blueprint_id=bp.blueprint_id, technique_id=bp.technique_id,
@@ -44,19 +62,17 @@ class SimulationWorker:
             )
             PolicyEngine.validate(ir)
             
-            # Replay protection
             org_id = uuid.UUID(int=0)
             self.repo.claim_blueprint(bp.blueprint_id, bp.action_id, org_id)
             
             execution.status = "APPROVED"
             self._audit("BLUEPRINT_VERIFIED", bp.blueprint_id)
             
-            # Execute
             execution.status = "RUNNING"
             execution.started_at = datetime.now(timezone.utc)
             self._audit("EXECUTION_STARTED", bp.blueprint_id)
             
-            exit_code, stdout, stderr, truncated, timed_out = self.docker_client.execute_bounded(
+            exit_code, stdout, stderr, truncated, timed_out = self.adapter.execute_bounded(
                 executable=bp.executable, arguments=bp.arguments, run_as_user=bp.run_as_user
             )
             

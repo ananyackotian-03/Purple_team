@@ -1,0 +1,20 @@
+title: Unix Shell Execution
+id: sentinelforge-shell-execution
+status: experimental
+description: Detects execution of bash or sh shells
+logsource:
+    category: process_creation
+    product: linux
+detection:
+    sel_bash:
+        ProcessName: bash
+    sel_sh:
+        ProcessName: sh
+    condition: sel_bash or sel_sh
+level: medium
+tags:
+    - attack.execution
+    - attack.t1059.004
+x-sentinelforge:
+    rule_id: sentinelforge-shell-execution
+    technique_id: T1059.004

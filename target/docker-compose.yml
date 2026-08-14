@@ -12,3 +12,37 @@ services:
     read_only: true
     tmpfs:
       - /tmp
+
+  redis:
+    image: redis:7-alpine
+    container_name: sentinelforge-redis
+    ports:
+      - "6379:6379"
+
+  falco:
+    image: falcosecurity/falco:0.38.1
+    container_name: falco_sidecar
+    restart: always
+    pid: host
+    command:
+      - falco
+      - -U
+      - -o
+      - json_output=true
+      - -c
+      - /etc/falco/falco.yaml
+    cap_drop:
+      - ALL
+    cap_add:
+      - SYS_PTRACE    # Inspect /proc
+      - SYS_RESOURCE  # Memory limits for eBPF maps
+      - SYS_ADMIN     # Fallback for some tracepoints
+      - SYS_BPF       # Modern eBPF probes
+      - PERFMON       # Modern eBPF probes
+    security_opt:
+      - apparmor:unconfined
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys/kernel/tracing:/sys/kernel/tracing:ro
+      - ./falco.yaml:/etc/falco/falco.yaml:ro
+      - ./rules.d:/etc/falco/rules.d:ro

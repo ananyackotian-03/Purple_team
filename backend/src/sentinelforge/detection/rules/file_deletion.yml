@@ -1,0 +1,18 @@
+title: File Deletion Detected
+id: sentinelforge-file-deletion
+status: experimental
+description: Detects file deletion via unlinkat syscall
+logsource:
+    category: process_creation
+    product: linux
+detection:
+    selection:
+        EventType: unlinkat
+    condition: selection
+level: medium
+tags:
+    - attack.defense_evasion
+    - attack.t1070.004
+x-sentinelforge:
+    rule_id: sentinelforge-file-deletion
+    technique_id: T1070.004

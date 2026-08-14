@@ -1,0 +1,269 @@
+SentinelForge — PRD V2 & Architecture Revision
+Continuous AI Purple Teaming • Adversarial Detection Validation • Detection Gap Remediation
+Status: New source of truth after the architectural pivot. Phase 1 is complete. Phase 2 is implemented but final Docker E2E validation is blocked by the current Windows/Docker environment. Phase 3 must follow the revised architecture before implementation continues.
+1. Executive Summary
+SentinelForge is an AI-driven continuous purple-teaming platform. An autonomous Red Agent continuously explores diverse adversarial strategies against authorized, isolated cyber-range assets. Real runtime telemetry is collected and evaluated by the detection stack. When an adversarial behavior is detected, the result becomes evidence of coverage. When it is missed, SentinelForge creates a Detection Gap. A Blue/Analyst Agent analyzes the evidence and existing detection logic, proposes a detection improvement, validates it against malicious and benign evidence, and retests it. The Red Agent can then adapt and try another strategy.
+Core loop: RED DISCOVERS → DETECTION OBSERVES → GAP IS IDENTIFIED → BLUE ANALYZES → DETECTION IS IMPROVED → RETEST PROVES THE CHANGE → RED ADAPTS.
+2. Problem Statement
+Fixed attack lists and periodic manual purple-team exercises can overfit a detection program to known test cases. A detection may recognize one representation of a behavior while missing another. Detection gaps are often discovered manually, and proposed fixes may not be empirically validated.
+Static test catalogs cannot exhaustively represent adversarial behavior.
+A successful attack simulation does not prove detection coverage.
+Missed detections require investigation and detection-engineering work.
+A new rule must be tested for both malicious coverage and false positives.
+AI is useful only if its creativity is contained by deterministic safety controls.
+3. Product Vision
+Give an AI attacker freedom to explore adversarial strategies inside an isolated cyber range while keeping production and control-plane assets outside its execution boundary. Turn every experiment into measurable detection evidence and turn meaningful misses into validated detection improvements.
+Product question:
+Can an intelligent adversary find something our detection system misses—and if it can, can SentinelForge turn that failure into a validated detection improvement?
+4. Design Principle: Creativity vs Safety
+Old model
+Revised model
+Attack allowlist
+Experiment safety/authorization boundary
+Only predefined actions execute
+Novel scenarios may execute inside the authorized range
+Policy asks whether an attack is known
+Policy asks whether the experiment is authorized and contained
+AI selects from a fixed attack universe
+AI reasons about objectives and strategies
+Container is the main security boundary
+Layered cyber-range isolation is the security boundary
+
+Unknown adversarial behavior is not rejected merely because it is unknown. The deterministic safety boundary evaluates authorized target, network, identity, privileges, resource limits, execution time, blast radius, and approval requirements.
+5. Goals
+Continuously generate diverse adversarial scenarios for authorized security objectives.
+Execute scenarios only inside isolated, explicitly authorized cyber ranges.
+Capture real runtime telemetry.
+Measure detection coverage and identify reliable Detection Gaps.
+Use AI to analyze why a detection missed a behavior.
+Generate candidate detection improvements.
+Validate candidates against malicious and benign evidence.
+Retest and empirically verify improvements.
+Allow the Red Agent to adapt after detection changes.
+Maintain durable evidence, audit trails, correlation and reproducibility.
+Scale to multiple simulation adapters without redesigning the control plane.
+6. Non-Goals and Safety Boundaries
+No attacks against production assets.
+No production credentials or unrestricted infrastructure credentials exposed to agents.
+No unrestricted Internet egress from the attack range.
+No Docker-socket access for the Red Agent.
+No autonomous production deployment of detection changes.
+No claim that the platform finds every possible attack or zero-day.
+No acceptance of an AI claim without evidence and retesting.
+No reliance on a single container as the only security boundary for high-risk autonomous testing.
+7. High-Level Architecture
+SECURITY OBJECTIVE       |       v RED AI AGENT       | Adversarial Scenario       |       vEXPERIMENT SAFETY BOUNDARY       |       vISOLATED CYBER RANGE       |       vSIMULATION ENGINE       |       vREAL TELEMETRY       |       vDETECTION ENGINE       |   +---+---+   |       |DETECTED  MISSED   |       |   |       v   |   DETECTION GAP   |       |   |   BLUE AI ANALYST   |       |   |   Why missed?   |       |   |   Candidate fix   |       |   |   Validate + Retest   |       |   +---+---+       |EMPIRICAL RESULT       |RED AI ADAPTS       |NEXT EXPERIMENT
+8. Trust Model
+Component
+Trust
+Role
+Red Agent / LLM
+Untrusted
+Generate adversarial strategies and plans
+Blue Agent / LLM
+Untrusted
+Analyze telemetry and propose detection changes
+Experiment Safety Boundary
+Trusted deterministic control
+Authorize and constrain experiments
+Policy / validation services
+Trusted
+Enforce invariants
+HMAC signing
+Trusted primitive
+Blueprint integrity/authenticity
+PostgreSQL
+Trusted durable state
+Replay, evidence, audit, results
+Simulation Worker
+Conditionally trusted / privileged
+Execute approved actions
+Attack Range
+Hostile/disposable
+Contain adversarial execution
+Falco
+Trusted privileged monitoring
+Observe runtime/kernel activity
+Raw Telemetry
+Untrusted
+Evidence only, never instructions
+Detection Engine
+Deterministic
+Evaluate normalized events
+
+9. Red Agent Requirements
+Input: security objective, authorized range, current coverage, experiment history and constraints.
+Output: adversarial scenario and execution plan, not unrestricted shell access.
+Explore materially different strategies rather than selecting a fixed attack ID.
+Prioritize unexplored detection space and avoid redundant experiments.
+Adapt after detection improvements.
+Propose a risk level; never authorize itself.
+Remain outside the trust boundary for execution.
+10. Experiment Safety Boundary
+The safety layer protects the environment without artificially restricting adversarial creativity to a fixed attack catalog.
+Authorized target identities and range membership.
+Authorized network/subnet boundaries.
+No production routes or credentials.
+No uncontrolled Internet egress.
+CPU, memory, storage, time and rate limits.
+Privilege/capability restrictions.
+Mandatory cleanup/reset.
+Approval gates for high-risk experiments.
+Full auditability of proposed, approved, rejected, executed and failed experiments.
+Stronger VM/cloud isolation for higher-risk testing.
+11. Simulation Architecture
+SecurityObjective      |AdversarialScenario      |ExecutionPlan      |Safety Validation      |ActionIR      |SignedBlueprint      |Simulation Adapter  |-- Container/Linux  |-- Web/API  |-- Database  |-- Windows  `-- Cloud/Lab (future)
+ActionIR remains the controlled execution representation. It no longer defines the universe of possible attacks.
+12. Telemetry and Detection
+Falco provides real runtime/kernel telemetry in the Linux range.
+Telemetry Collector remains unprivileged and has no Docker-socket access.
+Raw Falco output is normalized into NormalizedEvent.
+Telemetry is untrusted data and cannot issue instructions to agents.
+DetectionResult links evidence to simulation/action/exercise identity when correlation is reliable.
+Do not guess correlation; use NULL when evidence is insufficient.
+Redis is transport, not source of truth.
+PostgreSQL stores normalized events and detection results with bounded retention.
+13. Detection Outcomes
+Outcome
+Meaning
+DETECTED
+Expected behavior was observed and an applicable detection matched.
+NOT_DETECTED
+An event was observed but no applicable rule matched.
+DETECTION_GAP
+A correlated expected behavior occurred, an applicable detection existed, and it failed to match.
+EVENT_NO_MATCH
+Telemetry was observed but cannot yet be tied to an expected detection objective.
+
+14. Blue Agent Requirements
+Receive a Detection Gap package containing correlated evidence, expected behavior, existing rules and history.
+Explain the likely reason for the miss.
+Generate a candidate detection rule or modification.
+Validate syntax/schema/deterministic behavior.
+Test against malicious evidence.
+Test against benign evidence to evaluate false-positive risk.
+Retest the original adversarial scenario.
+Accept remediation only after empirical success.
+Version and audit accepted, rejected and superseded candidates.
+15. Continuous Red↔Blue Loop
+RED chooses objective + unexplored strategy        |SAFETY authorizes the experiment        |SIMULATE        |TELEMETRY        |DETECT        |  +-----+------+  |            |MATCH        MISS  |            |coverage    Detection Gap               |          BLUE analyzes               |        candidate detection               |     malicious + benign tests               |             retest               |        validated result               |     experiment memory/coverage               |       RED chooses next test
+16. Required Changes to Completed Phase 1
+Reframe the Policy Engine from an attack allowlist into an Experiment Safety/Authorization Boundary.
+Keep exact-match bash controls as low-level safety invariants for currently supported shell actions; do not remove them simply to increase AI creativity.
+Add SecurityObjective, AdversarialScenario, ExecutionPlan, RiskLevel and ExperimentConstraints domain concepts.
+Keep ActionIR as the constrained execution representation produced after planning and safety validation.
+Bind experiments to an authorized environment/range and tenant.
+Add a durable policy-decision record explaining allow, deny or escalation.
+Preserve HMAC, expiry, blueprint_id, replay protection, audit logging and tenant isolation.
+Extend lifecycle states to cover experiment, detection-gap, remediation and retest flows without permitting direct VERIFIED manipulation.
+Treat all LLM output and telemetry strings as untrusted.
+17. Required Changes to Completed Phase 2
+Keep SimulationWorker and its documented Docker-socket risk.
+Introduce a SimulationAdapter interface so Web/API/DB/Windows/Cloud adapters can be added later.
+Do not let the AI choose the final target; server-side policy resolves the actual authorized target.
+Retain timeout and output limits.
+Retain target hardening: non-root, dropped capabilities, no-new-privileges, read-only filesystem where compatible, and no Docker socket in the target.
+Add mandatory cleanup/reset semantics.
+Add range-level network and resource controls.
+Use stronger VM/cloud isolation for high-risk autonomous experiments.
+Finish real Phase 2 integration tests on Linux/native Docker before claiming complete E2E validation.
+Test timeout behavior and cleanup with the actual target image.
+18. Required Changes for Phase 3
+Implement the revised telemetry architecture, not a fixed-attack-only pipeline.
+Keep Falco privileged and Collector unprivileged.
+Pin and verify Falco version.
+Implement NormalizedEvent and DetectionResult with reliable correlation fields.
+Use NULL rather than guessing correlation.
+Use Redis only as transport and PostgreSQL as durable source of truth.
+Perform Sigma compatibility spike before relying on matcher features.
+Test malformed JSON, oversized events, malicious Unicode and prompt-injection telemetry.
+Use native Linux or a suitable Linux environment for real Falco E2E; fixtures are for unit/integration tests.
+19. New Components
+agents/red — adversarial planning and exploration
+agents/blue — detection-gap analysis
+experiment/ — objectives, scenarios, constraints and approvals
+simulation/adapters/ — pluggable execution targets
+validation/ — candidate detection validation and retest
+memory/ — experiment history and detection coverage
+coverage/ — strategy selection and unexplored-space prioritization
+20. Revised Phase Roadmap
+Phase
+Purpose
+Status
+1
+Control plane, security primitives, replay, state, audit
+COMPLETE — preserve and refactor semantics
+2
+Controlled simulation engine and hardened target
+IMPLEMENTED — E2E validation blocked by host environment
+3
+Real telemetry, normalization, detection, correlation
+NEXT — revised architecture
+4
+Red Agent: objective-driven adversarial planning
+PLANNED
+5
+Blue Agent: detection-gap analysis and remediation
+PLANNED
+6
+Continuous Red↔Blue optimization and memory
+PLANNED
+7
+Multi-range scaling, hardening, reporting, production readiness
+FUTURE
+
+21. Hackathon MVP
+One isolated Linux/web range.
+One or two security objectives.
+Red Agent produces multiple materially different scenarios.
+Real Falco telemetry.
+At least one genuine detection miss.
+Blue Agent explains the gap and proposes a detection improvement.
+Candidate rule is tested against malicious and benign evidence.
+Original scenario is retested successfully.
+Red Agent generates a subsequent variation.
+Dashboard shows coverage before/after, gaps, remediation and evidence.
+22. Success Metrics
+Detection coverage across generated scenarios.
+Number of unique Detection Gaps discovered.
+Candidate-fix validation rate.
+Retest success rate.
+False-positive regression rate.
+Time from gap discovery to validated remediation.
+Reduction in redundant experiments.
+Zero unauthorized target/network violations.
+Zero unbounded resource consumption.
+23. Threat Model
+Compromised Red Agent: must not reach production or obtain control-plane secrets.
+Prompt injection through telemetry: telemetry remains evidence only.
+Malicious generated scenario: deterministic safety boundary and range containment apply.
+Compromised target: disposable and isolated; no production path.
+Tampered blueprint: HMAC/expiry reject it.
+Replay: durable blueprint claim rejects duplicate execution.
+Compromised Worker: remains a high-impact risk; stronger isolation is a hardening priority.
+Compromised Redis: treated as transport compromise.
+Malicious candidate detection: cannot become accepted without validation and retest.
+24. Claims We Will Not Make
+SentinelForge can perform every possible attack.
+SentinelForge automatically finds every zero-day.
+The AI cannot be compromised.
+Docker alone makes autonomous attacks completely safe.
+An LLM-generated rule is automatically correct.
+Passing tests proves complete security.
+25. Positioning
+SentinelForge should be presented as a continuous adversarial detection-validation platform, not as a generic AI penetration tester.
+Core differentiator: AI-generated adversarial exploration + real telemetry + detection-gap reasoning + AI-assisted detection improvement + empirical retesting.
+26. Immediate Action Plan
+Freeze Phase 1 and Phase 2 as the baseline; do not rewrite working security primitives without evidence.
+Adopt this document as PRD V2 / new source of truth.
+Create Architecture V4 and update implementation plans.
+Implement the Experiment/Scenario domain layer before the Red Agent.
+Refactor simulation behind adapters.
+Complete Phase 2 Linux/Docker E2E validation.
+Implement Phase 3 telemetry/detection.
+Build Red Agent only after the deterministic experiment boundary exists.
+Build Blue Agent only after evidence/correlation is reliable.
+Implement the complete Red → Detect → Gap → Blue Fix → Retest → Red loop.
+For the hackathon, optimize for one convincing end-to-end loop rather than maximum attack breadth.
+27. Final Architecture Statement
+SentinelForge is not an unrestricted AI attacker. It is an AI-driven adversarial experimentation system operating inside a deliberately constrained cyber range. AI creativity exists above the deterministic safety boundary; execution, authorization, isolation, signing, replay protection, evidence and auditability remain deterministic. The product's value is the continuous challenge of the detection layer and the empirical conversion of detection failures into validated improvements.

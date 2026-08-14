@@ -1,0 +1,18 @@
+title: Shadow File Access Attempt
+id: sentinelforge-shadow-access
+status: experimental
+description: Detects attempts to read /etc/shadow via file access
+logsource:
+    category: process_creation
+    product: linux
+detection:
+    selection:
+        TargetFile|endswith: /shadow
+    condition: selection
+level: high
+tags:
+    - attack.credential_access
+    - attack.t1003.008
+x-sentinelforge:
+    rule_id: sentinelforge-shadow-access
+    technique_id: T1003.008

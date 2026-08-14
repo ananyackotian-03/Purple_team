@@ -1,0 +1,9 @@
+- macro: target_container
+  condition: container.name = "sentinelforge-target"
+
+- rule: SentinelForge Telemetry Syscalls
+  desc: Detect execve, openat, and unlinkat syscalls inside target container
+  condition: target_container and evt.type in (execve, openat, unlinkat)
+  output: "Syscall event in target container (evt_type=%evt.type container=%container.name user=%user.name proc=%proc.name cmdline=%proc.cmdline file=%fd.name)"
+  priority: WARNING
+  tags: [sentinelforge, telemetry, syscalls]

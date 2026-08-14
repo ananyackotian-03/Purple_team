@@ -1,0 +1,73 @@
+from abc import ABC, abstractmethod
+from typing import Tuple
+from sentinelforge.domain.experiment import ExperimentConstraints
+from sentinelforge.simulation.docker_client import SafeDockerClient
+
+
+class SimulationAdapter(ABC):
+    """Abstract base class for simulation execution environments.
+
+    Allows SentinelForge to support multiple execution backends
+    (Docker/Linux, Web/API, DB, Windows, Cloud labs) without
+    changing control-plane authorization, signing, or replay protection.
+    """
+
+    @abstractmethod
+    def execute_bounded(
+        self,
+        executable: str,
+        arguments: list[str],
+        run_as_user: str,
+        timeout: int = 30,
+        constraints: ExperimentConstraints | None = None,
+    ) -> Tuple[int, bytes, bytes, bool, bool]:
+        """Execute command within target sandbox.
+
+        Returns:
+            (exit_code, stdout_bytes, stderr_bytes, truncated, timed_out)
+        """
+        pass
+
+    @abstractmethod
+    def cleanup(self) -> None:
+        """Mandatory post-experiment reset/cleanup semantics."""
+        pass
+
+    @abstractmethod
+    def health_check(self) -> bool:
+        """Check if target range asset is available."""
+        pass
+
+
+class ContainerLinuxAdapter(SimulationAdapter):
+    """Concrete Docker/Linux container simulation adapter."""
+
+    def __init__(self, docker_client: SafeDockerClient | None = None):
+        self._docker = docker_client or SafeDockerClient()
+
+    def execute_bounded(
+        self,
+        executable: str,
+        arguments: list[str],
+        run_as_user: str,
+        timeout: int = 30,
+        constraints: ExperimentConstraints | None = None,
+    ) -> Tuple[int, bytes, bytes, bool, bool]:
+        t = constraints.max_execution_seconds if constraints else timeout
+        return self._docker.execute_bounded(
+            executable=executable,
+            arguments=arguments,
+            run_as_user=run_as_user,
+            timeout=t,
+        )
+
+    def cleanup(self) -> None:
+        # For container target, reset /tmp or container state if needed
+        pass
+
+    def health_check(self) -> bool:
+        try:
+            self._docker._get_target_container()
+            return True
+        except Exception:
+            return False

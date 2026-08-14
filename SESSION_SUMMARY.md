@@ -5,24 +5,62 @@
 - **Python**: 3.12.2
 - **Docker Context**: `desktop-linux` → `npipe:////./pipe/dockerDesktopLinuxEngine`
 
-## Phase 1 (COMPLETE)
-Core domain models, Policy Engine (deterministic, exact-match bash allowlist), HMAC-SHA256 signing/verification, blueprint expiration, replay protection via PostgreSQL `UNIQUE(blueprint_id)`, exercise state machine, structured `SecurityRejection` error model, audit logging, 8 unit security tests passing.
+## Architecture Alignment (PRD V2 Adopted)
+Adopted PRD V2 as the primary source of truth:
+- **Red AI Vision**: Autonomous exploration of adversarial strategies inside an isolated cyber range.
+- **Safety Principle**: AI creativity ≠ execution authorization. Policy Engine is the Experiment Safety / Authorization Boundary.
+- **Controlled Execution**: `ActionIR` remains the constrained execution representation; `SignedBlueprint` ensures HMAC integrity and single-execution replay protection.
 
-## Phase 2 (VERIFICATION PENDING)
-Simulation Worker orchestrates validated blueprint execution against a hardened Docker target container.
+## Phase 1 Baseline (COMPLETE & VERIFIED)
+- Core domain models (`ActionIR`, `SignedBlueprint`, `SecurityRejection`, `ExerciseStateMachine`).
+- `PolicyEngine` enforces clock skew tolerance (5s), authorized target (`sentinelforge-target`), authorized user (`labuser`), authorized executables, and exact bash command allowlists.
+- `BlueprintSigner` provides HMAC-SHA256 integrity and canonical serialization.
+- `SimulationRepository` provides replay protection via atomic claim in database.
+- 8/8 Phase 1 security unit tests passing (`backend/tests/test_security.py`).
+- 3/3 Phase 1 domain & safety boundary unit tests passing (`backend/tests/test_experiment.py`).
 
-### Key Decisions
-1. **Docker Exec Termination**: The Docker Engine API has no native mechanism to terminate `exec` sessions by ID. Sending a secondary `kill -9 <PID>` from the Worker was rejected because it creates a second arbitrary privileged execution pathway. Instead, commands are wrapped with `/usr/bin/timeout <seconds>` inside the target container. GNU timeout sends SIGTERM on expiry (exit code 124). This keeps termination within the target's security boundary.
-2. **Output Bounding**: Stdout is bounded during streaming — chunks are accumulated up to `MAX_STDOUT_BYTES` (64KB). When the limit is reached, remaining output is discarded and the result is marked as truncated. Memory never grows unbounded.
-3. **Docker SDK API**: Uses `exec_create` → `exec_start(stream=True)` → `exec_inspect`. The target is always resolved by name (`sentinelforge-target`), never by arbitrary container ID.
-4. **Stream Demuxing**: Docker SDK's `exec_start(stream=True)` without `demux=True` interleaves stdout/stderr into a single stream. For MVP, all output is captured as "stdout". This is a known limitation documented in test assertions.
+## Phase 2 Baseline (IMPLEMENTED)
+- `SimulationWorker` orchestrates validated blueprint execution.
+- `SafeDockerClient` provides bounded Docker exec with coreutils `/usr/bin/timeout` wrapper inside the target container.
+- `SimulationAdapter` abstract interface & `ContainerLinuxAdapter` implementation (1 test passing).
+- Hardened target (`ubuntu:22.04`, `labuser`, `cap_drop=ALL`, `no-new-privileges`, `read_only`, `tmpfs /tmp`).
 
-### Docker Environment Resolution
-The initial Docker connection failure (`pywintypes.error: (2, 'CreateFile', ...)`) was caused by the Docker Desktop daemon not running. After starting Docker Desktop, the Python Docker SDK connected successfully via the `desktop-linux` context's named pipe.
+## Phase 3 Detection Stack (IMPLEMENTED & VERIFIED)
+- `TelemetryNormalizer`: Bounded, sanitized conversion of raw Falco JSON to `NormalizedEvent`.
+- `SigmaEngine`: Evaluates `NormalizedEvent` dicts against Sigma detection rules with deterministic fallback.
+- `TelemetryCollector`: Ingestion, normalization, Sigma evaluation, and Redis streaming (9 tests passing).
 
-## Test Results
-**27 passed, 0 failed, 0 skipped** across both Phase 1 and Phase 2 test suites.
+## Phase 4 Red Agent & Safety Pipeline (IMPLEMENTED & VERIFIED)
+- `RedAgentPlanner`: Objective-driven adversarial scenario planner connecting `SecurityObjective` to `AdversarialScenario`, `ExecutionPlan`, `ActionIR`, and HMAC `SignedBlueprint`.
+- Enforces strict security invariant: No blueprint can be generated or signed without passing `ExperimentSafetyBoundary` and `PolicyEngine` deterministic checks.
+- Enforces scenario risk level ceilings, mandatory human approval escalation gates, exact-match bash allowlists, and execution expiry.
+- 12 Red Agent unit and security regression tests passing (`backend/tests/test_red_agent.py`).
 
-## Next Steps
-- Phase 3: Falco eBPF telemetry, Sigma rule evaluation (requires explicit approval).
+## Phase 3/4/5 Bridge — DetectionGapEvaluator (IMPLEMENTED & VERIFIED)
+- `DetectionGapEvaluator` (`backend/src/sentinelforge/detection/evaluator.py`): Scenario-level telemetry and detection correlator.
+- Correlates executed `ActionIR` actions, MITRE ATT&CK technique IDs, normalized telemetry events (`NormalizedEvent`), and `SigmaEngine` detection results (`DetectionResult`).
+- `ActionDetectionOutcome` & `ScenarioDetectionOutcome`: Structured, serializable outcome models containing per-action evidence, matching rule IDs, evidence event references, and explicit `gap_action_ids`.
+- Preserves scenario isolation (cross-scenario telemetry evidence filtering), deterministic deduplication, malformed telemetry handling, and false-positive protection (technique ID matching).
+- Strictly read-only with respect to execution and fail-closed: missing evidence or technique mismatch produces `DETECTION_GAP` or `NOT_DETECTED`.
+- 17 unit and security regression tests passing (`backend/tests/detection/test_gap_evaluator.py`).
+
+## Phase 5 Blue Agent Analyst & Detection Remediation Pipeline (IMPLEMENTED & VERIFIED)
+- `BlueAgentAnalyst` (`backend/src/sentinelforge/agents/blue_agent.py`): Analyzes `ScenarioDetectionOutcome` from `DetectionGapEvaluator` to derive evidence-backed root cause gap analysis (`GapAnalysisResult` supporting `NO_TELEMETRY`, `NO_RULE_MATCH`, `UNRELATED_RULE_MATCH`, `INSUFFICIENT_TECHNIQUE_METADATA`, `INSUFFICIENT_RULE_COVERAGE`).
+- `CandidateSigmaRule`: Derives structured Sigma rules with `to_yaml()` and `from_yaml()` preserving mandatory `x-sentinelforge` provenance block (`scenario_id`, `action_ids`, `technique_id`, `rule_id`).
+- `SigmaRuleValidator`: Validates YAML syntax, required fields, technique matching, and enforces broad-rule rejection (e.g. bare `process_name=bash`).
+- `RuleValidationSandbox`: Evaluates candidate rules against malicious (must detect) and benign (must not trigger) telemetry in-memory without executing commands.
+- `RetestOrchestrator`: Prepares `RetestRequest` upon validation pass and executes retesting strictly through `RedAgentPlanner` → `SafetyBoundary` → `PolicyEngine` → `SignedBlueprint` → `SimulationAdapter` → Telemetry → `DetectionGapEvaluator`.
+- `ExerciseStateMachine`: Enforces that `VERIFIED` state strictly requires a valid, improved `RetestResult` (where before is failure, after is DETECTED, and detection_improved is True). Bare booleans and invalid RetestResults are strictly rejected.
+- 21 Blue Agent unit, security, and adversarial tests passing (`backend/tests/test_blue_agent.py`).
+
+## Verification Status
+- **Total Automated Unit Tests**: **71 passed**, 0 failed.
+  - `backend/tests/test_security.py`: 8 passed
+  - `backend/tests/test_experiment.py`: 3 passed
+  - `backend/tests/test_adapter.py`: 1 passed
+  - `backend/tests/detection/test_detection.py`: 9 passed
+  - `backend/tests/detection/test_gap_evaluator.py`: 17 passed
+  - `backend/tests/test_red_agent.py`: 12 passed
+  - `backend/tests/test_blue_agent.py`: 21 passed
+
 
