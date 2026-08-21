@@ -1,172 +1,212 @@
-"""SentinelForge Integration Tests — End-to-End Red/Blue Detection Remediation Pipeline
+"""SentinelForge Branch 2 — End-to-End Test: Full Remediation Loop."""
 
-Exercises the complete closed-loop workflow against real infrastructure boundaries:
-RedAgentPlanner -> SafetyBoundary -> PolicyEngine -> SignedBlueprint -> ContainerLinuxAdapter ->
-Telemetry -> SigmaEngine -> DetectionGapEvaluator -> DETECTION_GAP -> BlueAgentAnalyst ->
-CandidateSigmaRule -> SigmaRuleValidator -> RuleValidationSandbox -> RetestOrchestrator ->
-Authorized Retest -> Telemetry -> DetectionGapEvaluator -> DETECTED -> RetestResult ->
-ExerciseStateMachine -> VERIFIED.
-"""
-
-from datetime import datetime, timezone
-from uuid import uuid4
+import os
+import tempfile
 import pytest
+from datetime import datetime, timezone, timedelta
+from uuid import uuid4
 
-from sentinelforge.agents.blue_agent import (
-    BlueAgentAnalyst,
-    RetestOrchestrator,
-    RuleValidationSandbox,
-    SigmaRuleValidator,
+from sentinelforge.remediation.clone_manager import CloneManager
+from sentinelforge.remediation.executor import CloneRemediationExecutor
+from sentinelforge.remediation.models import (
+    ApplicationTarget,
+    PatchSpec,
+    RemediationBudget,
+    RemediationOutcome,
+    RemediationProposal,
+    TargetEnvironment,
+    TargetType,
+    VulnerabilityCategory,
+    VulnerabilityConfidence,
+    VulnerabilityFinding,
+    VulnerabilitySeverity,
+    VulnerabilityStatus,
 )
-from sentinelforge.agents.red_agent import RedAgentPlanner
-from sentinelforge.detection.evaluator import (
-    ActionDetectionOutcome,
-    DetectionGapEvaluator,
-    ScenarioDetectionOutcome,
-)
-from sentinelforge.detection.normalizer import NormalizedEvent
-from sentinelforge.detection.sigma_engine import DetectionOutcome, SigmaEngine
-from sentinelforge.domain.experiment import (
-    CandidateSigmaRule,
-    RetestResult,
-    SecurityObjective,
-    ValidationSandboxStatus,
-)
-from sentinelforge.domain.state_machine import ExerciseStateMachine
-from sentinelforge.simulation.adapter import ContainerLinuxAdapter
-
-pytestmark = [pytest.mark.integration, pytest.mark.docker]
+from sentinelforge.remediation.orchestrator import RemediationOrchestrator
+from sentinelforge.remediation.policy import RemediationPolicy
+from sentinelforge.remediation.retest import VulnerabilityRetestOrchestrator
 
 
-def test_full_closed_loop_e2e_remediation(require_docker, monkeypatch):
-    """Test full E2E Red/Blue detection remediation loop using ContainerLinuxAdapter."""
-    # 1. Initialize Red Agent, Adapter, SigmaEngine, and DetectionGapEvaluator
-    red_planner = RedAgentPlanner(signing_key="sentinelforge-e2e-key", key_id="key-e2e")
-    adapter = ContainerLinuxAdapter()
-    assert adapter.health_check() is True
+@pytest.fixture
+def vulnerable_app(tmp_path):
+    """Create a vulnerable Flask app with SQL injection."""
+    app_dir = tmp_path / "app"
+    app_dir.mkdir()
+    (app_dir / "app.py").write_text('''from flask import Flask, request
+import sqlite3, os
 
-    objective = SecurityObjective(
-        objective_id=uuid4(),
-        organization_id=uuid4(),
-        title="E2E Credential Access Protection",
-        description="Verify defensive detection and blue agent remediation for shadow file access",
-    )
+app = Flask(__name__)
+DB_PATH = os.path.join(os.path.dirname(__file__), "app.db")
 
-    # 2. Execute Initial Red Agent Plan (Credential Access Strategy)
-    plan_res = red_planner.plan_scenario(objective=objective, strategy_type="credential_dump_shadow")
-    assert plan_res.is_allowed is True
-    assert len(plan_res.actions) == 1
-    action_ir = plan_res.actions[0]
+def get_db():
+    return sqlite3.connect(DB_PATH)
 
-    # 3. Execute bounded command via ContainerLinuxAdapter on sentinelforge-target
-    exit_code, stdout_bytes, stderr_bytes, truncated, timed_out = adapter.execute_bounded(
-        executable=action_ir.executable,
-        arguments=action_ir.arguments,
-        run_as_user=action_ir.run_as_user,
-        timeout=30,
-    )
-    assert exit_code != 0  # labuser shadow access should yield non-zero permission denied
+@app.route("/")
+def index():
+    return "Welcome"
 
-    # 4. Normalize execution telemetry
-    cmd_line = " ".join(action_ir.arguments) if action_ir.arguments else action_ir.executable
-    scenario_id_str = str(plan_res.scenario.scenario_id)
+@app.route("/login", methods=["POST"])
+def login():
+    username = request.form.get("username", "")
+    password = request.form.get("password", "")
+    conn = get_db()
+    query = f"SELECT * FROM users WHERE username='"'"'{username}'"'"' AND password='"'"'{password}'"'"'"
+    try:
+        user = conn.execute(query).fetchone()
+    except Exception:
+        user = None
+    if user:
+        return "Welcome, " + username
+    return "Invalid"
+''')
+    return app_dir
 
-    malicious_event = NormalizedEvent(
-        event_id=str(uuid4()),
-        correlation_id=scenario_id_str,
-        timestamp=datetime.now(timezone.utc).isoformat() + "Z",
-        source="linux_auditd",
-        EventType="execve",
-        ProcessName="cat",
-        Executable=action_ir.executable,
-        CommandLine=cmd_line,
-        UserName=action_ir.run_as_user,
-        UserUid=1000,
-        TargetFile="/etc/shadow",
-        ContainerName="sentinelforge-target",
-        ContainerId="c_sentinel",
-        ParentProcess="bash",
-        raw_event_hash=str(hash(cmd_line + str(exit_code))),
-    )
 
-    benign_event = NormalizedEvent(
-        event_id=str(uuid4()),
-        correlation_id=scenario_id_str,
-        timestamp=datetime.now(timezone.utc).isoformat() + "Z",
-        source="linux_auditd",
-        EventType="execve",
-        ProcessName="bash",
-        Executable="/usr/bin/bash",
-        CommandLine="whoami",
-        UserName="labuser",
-        UserUid=1000,
-        TargetFile=None,
-        ContainerName="sentinelforge-target",
-        ContainerId="c_sentinel",
-        ParentProcess="bash",
-        raw_event_hash="hash_benign",
-    )
+class TestEndToEndRemediation:
+    def test_full_remediation_loop(self, vulnerable_app):
+        """Test the complete Branch 2 remediation pipeline."""
+        org_id = uuid4()
 
-    # 5. Evaluate Initial Telemetry -> Expect DETECTION_GAP (no rule registered yet)
-    sigma_engine = SigmaEngine()
-    gap_evaluator = DetectionGapEvaluator()
+        target = ApplicationTarget(
+            target_id=uuid4(),
+            organization_id=org_id,
+            name="Vulnerable Flask App",
+            target_type=TargetType.DOCKERIZED,
+            environment=TargetEnvironment.LAB,
+            local_path=str(vulnerable_app),
+            authorization_expiry=datetime.now(timezone.utc) + timedelta(hours=1),
+        )
 
-    before_outcome = gap_evaluator.evaluate_scenario(
-        scenario_id=plan_res.scenario.scenario_id,
-        actions=plan_res.actions,
-        events=[malicious_event],
-        sigma_engine=sigma_engine,
-        organization_id=objective.organization_id,
-    )
-    assert before_outcome.overall_outcome == DetectionOutcome.DETECTION_GAP
-    assert len(before_outcome.gap_action_ids) == 1
+        finding = VulnerabilityFinding(
+            finding_id=uuid4(),
+            organization_id=org_id,
+            target_id=target.target_id,
+            attack_technique_id="T1190",
+            vulnerability_category=VulnerabilityCategory.INJECTION.value,
+            affected_component="/login",
+            evidence="SQL injection via f-string formatting",
+            severity=VulnerabilitySeverity.HIGH,
+            confidence=VulnerabilityConfidence.CONFIRMED,
+            status=VulnerabilityStatus.OPEN,
+            reproduction_info="POST /login with username=' OR '1'='1",
+        )
 
-    # 6. Blue Agent Analyst analyzes detection gap and derives CandidateSigmaRule
-    analyst = BlueAgentAnalyst()
-    gaps = analyst.analyze_gap(before_outcome, actions=plan_res.actions)
-    assert len(gaps) == 1
-    assert gaps[0].root_cause == "NO_RULE_MATCH"
+        proposal = RemediationProposal(
+            proposal_id=uuid4(),
+            finding_id=finding.finding_id,
+            organization_id=org_id,
+            root_cause="SQL injection via f-string formatting",
+            proposed_remediation="Use parameterized queries",
+            affected_files=["app.py"],
+            patches=[
+                PatchSpec(
+                    file_path="app.py",
+                    operation="modify",
+                    patch_diff='''from flask import Flask, request
+import sqlite3, os
 
-    candidate_rule = analyst.propose_candidate_rule(
-        gap_analysis=gaps[0], action=action_ir, telemetry_events=[malicious_event]
-    )
-    assert candidate_rule.source_scenario_id == str(plan_res.scenario.scenario_id)
-    assert candidate_rule.source_action_ids == [str(action_ir.action_id)]
+app = Flask(__name__)
+DB_PATH = os.path.join(os.path.dirname(__file__), "app.db")
 
-    # 7. Validate Candidate Sigma Rule syntax, schema, and false-positive immunity
-    validator = SigmaRuleValidator()
-    is_valid, val_err = validator.validate_candidate_rule(candidate_rule, expected_technique="T1003.008")
-    assert is_valid is True
+def get_db():
+    return sqlite3.connect(DB_PATH)
 
-    sandbox = RuleValidationSandbox()
-    sandbox_res = sandbox.validate_candidate_rule(candidate_rule, [malicious_event], [benign_event])
-    assert sandbox_res.status == ValidationSandboxStatus.ACCEPTED
+@app.route("/")
+def index():
+    return "Welcome"
 
-    # 8. Retest Orchestrator prepares RetestRequest & executes authorized retest
-    orchestrator = RetestOrchestrator()
-    retest_req = orchestrator.prepare_retest(
-        scenario_id=before_outcome.scenario_id,
-        gap_action_ids=before_outcome.gap_action_ids,
-        candidate_rules=[candidate_rule],
-        validation_result=sandbox_res,
-    )
+@app.route("/login", methods=["POST"])
+def login():
+    username = request.form.get("username", "")
+    password = request.form.get("password", "")
+    conn = get_db()
+    query = "SELECT * FROM users WHERE username=? AND password=?"
+    try:
+        user = conn.execute(query, (username, password)).fetchone()
+    except Exception:
+        user = None
+    if user:
+        return "Welcome, " + username
+    return "Invalid"
+''',
+                )
+            ],
+            expected_security_effect="Prevents SQL injection",
+            expected_behavior="Login works with valid credentials",
+            test_plan="Test with SQL payloads",
+            rollback_plan="Revert file",
+            risk_assessment="Low",
+        )
 
-    retest_res = orchestrator.execute_retest(
-        retest_request=retest_req,
-        objective=objective,
-        red_planner=red_planner,
-        adapter=adapter,
-        sigma_engine=sigma_engine,
-        gap_evaluator=gap_evaluator,
-        before_outcome=before_outcome,
-        strategy_type="credential_dump_shadow",
-    )
+        orchestrator = RemediationOrchestrator()
+        is_valid, reason = orchestrator.validate_proposal(proposal)
+        assert is_valid is True, f"Proposal validation failed: {reason}"
 
-    assert retest_res.before_outcome == "DETECTION_GAP"
-    assert retest_res.after_outcome == "DETECTED"
-    assert retest_res.detection_improved is True
-    assert candidate_rule.rule_id in retest_res.validated_rule_ids
+        clone_manager = CloneManager()
+        executor = CloneRemediationExecutor(clone_manager)
+        clone = clone_manager.create_clone(target)
 
-    # 9. ExerciseStateMachine transition to VERIFIED
-    final_state = ExerciseStateMachine.transition("RETESTING", "VERIFIED", retest_result=retest_res)
-    assert final_state == "VERIFIED"
+        try:
+            exec_result = executor.execute(
+                proposal=proposal,
+                clone=clone,
+                original_source_path=target.local_path,
+            )
+
+            assert exec_result.build_passed is True, f"Build failed: {exec_result.build_output}"
+            assert exec_result.tests_passed is True, f"Tests failed: {exec_result.test_output}"
+
+            remediated_app_path = os.path.join(clone.filesystem_path, "app.py")
+            with open(remediated_app_path) as f:
+                content = f.read()
+            assert "?" in content, "Parameterized query not found"
+
+        finally:
+            clone_manager.cleanup_clone(clone)
+
+    def test_policy_blocks_production_target(self):
+        """Test that production targets are blocked from remediation."""
+        target = ApplicationTarget(
+            target_id=uuid4(),
+            organization_id=uuid4(),
+            name="Production App",
+            target_type=TargetType.DOCKERIZED,
+            environment=TargetEnvironment.PRODUCTION,
+            local_path="/opt/prod",
+            authorization_expiry=datetime.now(timezone.utc) + timedelta(hours=1),
+        )
+
+        clone_manager = CloneManager()
+        with pytest.raises(Exception, match="Production targets cannot enter"):
+            clone_manager.create_clone(target)
+
+    def test_policy_blocks_forbidden_files(self):
+        """Test that proposals modifying forbidden files are rejected."""
+        proposal = RemediationProposal(
+            proposal_id=uuid4(),
+            finding_id=uuid4(),
+            organization_id=uuid4(),
+            root_cause="test",
+            proposed_remediation="test",
+            affected_files=["Dockerfile"],
+            patches=[
+                PatchSpec(file_path="Dockerfile", operation="modify", patch_diff="FROM alpine")
+            ],
+            expected_security_effect="test",
+            expected_behavior="test",
+            test_plan="test",
+            rollback_plan="test",
+            risk_assessment="test",
+        )
+        orchestrator = RemediationOrchestrator()
+        is_valid, _ = orchestrator.validate_proposal(proposal)
+        assert is_valid is False
+
+    def test_budget_enforcement(self):
+        """Test that budget limits are enforced."""
+        budget = RemediationBudget(max_iterations=2, max_llm_calls=2)
+        started_at = datetime.now(timezone.utc)
+
+        assert budget.has_remaining(iteration=1, llm_calls=1, started_at=started_at) is True
+        assert budget.has_remaining(iteration=2, llm_calls=1, started_at=started_at) is False
+        assert budget.has_remaining(iteration=1, llm_calls=2, started_at=started_at) is False

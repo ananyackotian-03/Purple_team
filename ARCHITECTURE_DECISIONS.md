@@ -1,68 +1,36 @@
 # Architecture Decisions
+- **Docker Exec Termination**: The Docker API lacks a native mechanism to terminate `exec` sessions. Instead of introducing a secondary `kill -9` execution loop in the privileged Worker, commands are securely prefixed with `/usr/bin/timeout <secs>` (provided by `coreutils` in the target). This respects the Policy Engine while ensuring execution does not hang indefinitely.
+- **Simulation Worker Privilege**: Explicitly documented that the wrapper is an application-level restriction, not a host security boundary.
 
-## ADR-001: Auditd Replaced by Falco eBPF Sidecar
-**Context**: The Linux audit subsystem is not namespaced. Auditd cannot run inside a container with `cap_drop=ALL`.
-**Decision**: Use Falco with eBPF as a sidecar container for syscall-level telemetry.
-**Status**: Decision made. Falco configuration defined in Phase 3.
+## Provider layer (2026-08-18)
+- **Provider substitution over vendor lock-in**: All LLM access goes through the `LLMProvider` abstraction. The agent architecture is vendor-agnostic; provider selection is a composition choice (`FallbackProvider`/`RetryableProvider` wrapping any concrete driver).
+- **Lazy SDK loading**: Vendor drivers (`OpenAIProvider`, `AnthropicProvider`, `GeminiProvider`) import their SDK only when a request is actually made. Constructing a driver never requires the SDK or a paid API, and a missing SDK fails closed with `ProviderAPIError`.
+- **Local-first development**: `OpenAICompatibleProvider` targets any OpenAI Chat Completions-compatible local server (Ollama, LM Studio, vLLM) using only the standard library, so the full architecture can be developed and tested without paid API usage. It is the recommended dev-time provider.
+- **Retry scope split**: `RetryableProvider` retries ONLY `ProviderAPIError`/`ProviderTimeoutError` (infrastructure failures) with exponential backoff (1s/2s/4s, capped). `SchemaValidationError` (malformed output) is deliberately NOT retried at the provider layer — the agent's schema-retry loop owns that, keeping schema enforcement in the deterministic control plane.
+- **Fallback does not swallow schema errors**: `FallbackProvider` switches providers only on `ProviderAPIError`; a malformed-output schema error from the primary propagates immediately so the control plane (not the provider chain) decides.
+- **Injectable transports/clients**: `OpenAICompatibleProvider.http_post`, and vendor `client_factory`, are injected in tests to exercise the full request/parse/error path without network access or API keys. This is test plumbing only — no authority is granted to providers either way.
 
-## ADR-002: Policy Engine as Experiment Safety / Authorization Boundary
-**Context**: Security authorization must be deterministic and auditable. AI creativity must be contained without restricting adversarial scenarios to static lists.
-**Decision**: The Policy Engine reframes static allowlisting into an Experiment Safety / Authorization Boundary (`ExperimentSafetyBoundary`). Higher-level authorization evaluates targets, user identities, risk levels, and human approval constraints. Low-level process execution retains exact string matching for bash commands as a low-level safety invariant.
-**Rationale**: Deterministic safety checks prevent prompt injection or LLM hallucination from exceeding containment, while allowing the Red Agent to generate novel adversarial scenarios above the boundary.
+## Step 2A: Execution Dispatch (2026-08-18)
+- **Single execution path**: The Red Agent's only execution mechanism is the existing `SimulationWorker`. The agent turns signed blueprints into `SimulationRequest`s and forwards them to `config.worker`; it never constructs commands itself. No second execution mechanism was introduced.
+- **Worker owns execution authority**: All post-signing checks (HMAC, `PolicyEngine`, replay claim, bounded adapter execution) remain exclusively at the `SimulationWorker` boundary. The agent merely relays and records.
+- **Fail-safe dispatch**: `_dispatch_to_worker` catches worker exceptions per blueprint and records a FAILED `SimulationExecution` (design §19 — simulation/target failure is logged, the strategy is unverified, the loop continues). Dispatch outcomes are surfaced as `SIMULATION_REJECTED` (worker refused every blueprint) vs `SIMULATION_FAILED` (worker raised) vs `EXECUTED`.
+- **Testability without Docker**: Dispatch tests inject a fake `SimulationAdapter` into a real `SimulationWorker` over in-memory SQLite, so the full verify→policy→claim→execute path is exercised deterministically in the unit suite.
 
-## ADR-003: HMAC Provides Integrity, Not Authorization
-**Context**: HMAC-SHA256 signs the complete security-relevant blueprint payload.
-**Decision**: HMAC proves that a blueprint was not tampered with and was issued by a trusted signer. It does NOT by itself authorize execution. The Policy Engine / Safety Boundary is the authorization boundary.
+## Step 2B: Telemetry Collection (2026-08-18)
+- **Transport-only collection leg**: `TelemetryCollector.collect()` is a new method on the EXISTING collector — it normalizes via the existing `TelemetryNormalizer`, publishes to the existing Redis stream (`sentinelforge:telemetry:detections`, consumer group `engine_group`), and returns the `NormalizedEvent` hand-off. It performs no detection decisions. No second collector, stream, normalizer, or detection mechanism was created.
+- **Single stream, typed payloads**: telemetry publishes on the same stream as detections, tagged `kind: telemetry` (detections keep `kind`-less `DetectionResult` payloads) so a future consumer can distinguish them without a second stream.
+- **Eligibility = actual execution**: telemetry is claimed only for `COMPLETED`/`TIMEOUT` executions (the adapter started the action). REJECTED/FAILED dispatches (denied, invalid, unauthorized, bad signature, expired, replayed, policy-denied, failed-before-execution) never claim telemetry.
+- **Deterministic, non-guessed correlation**: `correlation_id` derives solely from the executed blueprint identity; if unavailable → NULL. Time-window/container/marker correlation is the telemetry source's responsibility.
+- **Telemetry is untrusted data**: sanitized (null/control stripped, NFC, bounded) but never interpreted; NFC is documented as NOT homoglyph protection.
+- **Privilege boundary**: collector/normalizer are unprivileged — no Docker socket, HMAC keys, or policy configuration (verified by source-introspection tests).
+- **Redis transport semantics**: at-least-once, malformed/oversized rejected before publish (ack-after-success precondition), publish failures non-fatal, bounded message size, PG remains source of truth.
 
-## ADR-004: Docker Socket is an MVP Trust Boundary
-**Context**: The Simulation Worker requires Docker socket access to execute commands inside the target container.
-**Decision**: For MVP, `/var/run/docker.sock` is mounted to the Worker container. This gives the Worker effective root-level host access.
-**Documented Risk**: A fully compromised Worker could bypass the application-level wrapper and control Docker arbitrarily. The `SafeDockerClient` wrapper prevents unauthorized operations through the *normal application execution path* only.
-**Future**: Phase 2+ should evaluate a restricted Docker socket proxy or VM isolation.
-
-## ADR-005: Docker Exec Termination via GNU timeout
-**Context**: The Docker Engine API does not provide a native mechanism to terminate exec sessions by ID. The initial approach of sending `kill -9 <PID>` from the Worker was rejected because it creates a second arbitrary privileged execution pathway that bypasses the Policy Engine.
-**Decision**: Commands are wrapped with `/usr/bin/timeout <seconds>` inside the target container before execution. GNU timeout sends SIGTERM on expiry and exits with code 124.
-**Rationale**: Termination happens entirely within the target container's security context. No secondary Worker-side command execution is needed.
-
-## ADR-006: Stream Demuxing Limitation
-**Context**: Docker SDK's `exec_start(stream=True)` without `demux=True` interleaves stdout and stderr into a single byte stream.
-**Decision**: For MVP, all interleaved output is captured as "stdout" in `SimulationExecution`.
-
-## ADR-007: Replay Protection via PostgreSQL Unique Constraint
-**Context**: Blueprint replay must be prevented durably across Worker restarts.
-**Decision**: `SimulationResult.blueprint_id` has a `UNIQUE` constraint. The `SimulationRepository.claim_blueprint()` method performs an atomic INSERT. If `IntegrityError` occurs, the blueprint has already been claimed → `REPLAY_DETECTED`.
-
-## ADR-008: Bounded Output Collection
-**Context**: A malicious or misconfigured command could produce unlimited output, causing memory exhaustion.
-**Decision**: Output is bounded during streaming. `MAX_STDOUT_BYTES = 64KB`. When the accumulated buffer exceeds this limit, remaining chunks are discarded and the result is marked `truncated = True`.
-
-## ADR-009: Pluggable Simulation Adapters (`SimulationAdapter`)
-**Context**: SentinelForge must scale to non-Docker targets (Web/API, DB, Windows, Cloud labs) without altering control-plane safety logic.
-**Decision**: Introduce `SimulationAdapter` abstract interface. `ContainerLinuxAdapter` wraps the existing `SafeDockerClient` implementation.
-**Rationale**: Keeps control plane decoupled from specific lab environments.
-
-## ADR-010: Telemetry Is Evidence, Never Instructions
-**Context**: Telemetry generated during adversarial execution passes through collector and detection engines.
-**Decision**: Telemetry input is untrusted data. Every field is sanitized, null-stripped, NFC-normalized, and bounded in length. Telemetry strings are never evaluated or interpreted as instructions by agents.
-
-## ADR-011: Sigma Matcher Fallback Engine
-**Context**: External `pySigma` and `sigma-rule-matcher` AST translation libraries may not be available or fully compatible in all execution environments.
-**Decision**: `SigmaEngine` integrates `pySigma` when available and falls back to a built-in deterministic field-matcher.
-**Rationale**: Ensures telemetry detection remains reliable without hard external dependency blocks.
-
-## ADR-012: Formal Execution Constraints in ActionIR Schema
-**Context**: Execution limits (`max_execution_seconds`, `max_stdout_bytes`) were passed dynamically from `RedAgentPlanner` to `ActionIR` without formal Pydantic schema declarations.
-**Decision**: Formally declare `max_execution_seconds` (default: 30s, ge: 1, le: 300) and `max_stdout_bytes` (default: 64KB, ge: 1024, le: 1MB) as explicit `ActionIR` model attributes.
-**Rationale**: Guarantees boundary parameters are validated, typed, and signed deterministically.
-
-## ADR-013: Unicode NFC Canonicalization & Homoglyph Security Invariant
-**Context**: Untrusted telemetry strings require sanitization. Previous documentation incorrectly suggested NFC normalization prevents homoglyph attacks.
-**Decision**: `TelemetryNormalizer` applies `unicodedata.normalize('NFC', value)` to canonicalize combined Unicode codepoints.
-**Security Invariant**: NFC normalization standardizes string encoding but **does NOT convert cross-script homoglyphs/confusables** (e.g. Latin 'a' `U+0061` vs Cyrillic 'а' `U+0430`). Security authorization relies strictly on exact-match allowlists, canonical binary paths, and structured schemas.
-
-## ADR-014: Durable Detection Gap & Policy Decision Persistence
-**Context**: Telemetry detection gaps and safety boundary decisions must establish an auditable evidence chain for remediation and retesting.
-**Decision**: Introduce `DetectionGapRecord` (table `detection_gaps`) and wire `PolicyDecisionRecord` (table `policy_decisions`) persistence in the database with Alembic migration version `001_reconciliation_schema_update`.
-**Rationale**: Ensures gap analysis, rule generation, and verification history persist across worker and service restarts.
-
+## Branch 2: Application Vulnerability Remediation (2026-08-19)
+- **Production READ-ONLY**: When `target.environment == PRODUCTION`, SentinelForge may read but NEVER write. Remediation proposals against production targets are blocked at the `TargetAuthorizationValidator` layer. Only `STAGING`, `DEVELOPMENT`, or `LAB` targets are eligible for remediation.
+- **Clone-based remediation**: All remediation operations execute against isolated Docker clones, never against the source application. Clones are created from pinned source revisions (commit SHA or image tag) for reproducibility.
+- **LLM proposes, infrastructure applies**: The LLM generates structured `RemediationProposal` objects (Pydantic schema). `RemediationPolicyValidator` validates file paths, patch sizes, and forbidden operations. `CloneRemediationExecutor` applies patches through the existing `SimulationAdapter` pipeline.
+- **Existing Red Agent reused for retest**: Branch 2 does NOT create a second Red Agent. The existing `RedAgent` replays the original attack scenario against the remediated clone, then tests relevant variants. This reuses `SafetyBoundaryBridge`, `PolicyEngine`, `ActionIR`, `BlueprintSigner`, `SimulationAdapter`, and `DetectionGapEvaluator`.
+- **Branch 2 state machine is additive**: New states (`VULNERABILITY_FOUND`, `VULNERABILITY_ANALYZING`, `REMEDIATION_PROPOSED`, `REMEDIATION_VALIDATING`, `CLONE_CREATING`, `ROLLING_BACK`, `REMEDIATION_FAILED`, `REQUIRES_HUMAN_REVIEW`) are added to `VALID_TRANSITIONS`. All existing Branch 1 transitions are preserved exactly.
+- **Shared `REMEDIATING` state with type-differentiated guards**: Branch 1 and Branch 2 both use `REMEDIATING → RETESTING`. The guard logic differentiates by the type of retest result: Branch 1 uses `RetestResult` (detection improved), Branch 2 uses `VulnerabilityRetestResult` (vulnerability eliminated).
+- **Bounded remediation loop**: Maximum 3 remediation attempts per finding, enforced by `RemediationBudget` (Python). The LLM cannot modify budget limits or declare premature verification. Budget exhaustion → `REQUIRES_HUMAN_REVIEW`.
+- **Snapshot-based rollback**: Every remediation attempt creates a Docker snapshot before applying patches. If build/test/retest fails, the clone is restored to the snapshot. Rollback failure → `REQUIRES_HUMAN_REVIEW`.

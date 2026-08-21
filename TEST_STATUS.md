@@ -1,61 +1,62 @@
-# Test Status
+# SENTINELFORGE — TEST STATUS
 
-## Summary
-- **Phase 1 Unit Security & State Machine**: 8 passing
-- **Phase 1 Domain, Safety Boundary, ActionIR & NFC**: 7 passing
-- **Phase 2 Simulation Adapter Abstraction & Cleanup**: 1 passing
-- **Phase 3 Telemetry & Detection Stack**: 9 passing
-- **DetectionGapEvaluator & Scenario Correlator**: 17 passing
-- **Red Agent Planner Scaffolding**: 12 passing
-- **Blue Agent Analyst Scaffolding**: 21 passing
-- **Phase 6 Concurrency & Replay Atomicity Integration**: 3 passing
-- **Phase 6 Security Adversarial Integration**: 11 passing
-- **Phase 6 Target Container Hardening Integration (Docker)**: 7 passing (**VERIFIED**)
-- **Phase 6 Simulation Worker Integration (Docker)**: 12 passing (**VERIFIED**)
-- **Phase 6 Closed-Loop E2E Remediation Integration (Docker)**: 1 passing (**VERIFIED**)
+**Last run**: 2026-08-19
+**Total**: 394 passed, 33 skipped, 83 warnings
 
-**SUMMARY**:
-- **Unit & Security Tests**: **75 PASSED**, 0 failed, 0 skipped (**VERIFIED**)
-- **Integration Tests**: **34 PASSED**, 0 failed, 0 skipped (**VERIFIED** with real Docker daemon)
-- **TOTAL**: **109 TESTS PASSED**, 0 failed, 0 skipped
+---
 
-## Security & Architectural Boundaries Verified
-✅ Tampered blueprints are rejected.
-✅ Expired blueprints are rejected.
-✅ Replayed blueprints are rejected.
-✅ Unauthorized bash commands are rejected.
-✅ Unauthorized execution targets are rejected.
-✅ Unauthorized execution users are rejected.
-✅ ActionIR execution constraint bounds (`max_execution_seconds`, `max_stdout_bytes`) enforced and verified.
-✅ Unicode NFC normalization verified without collapsing distinct homoglyphs.
-✅ ContainerLinuxAdapter cleanup verified fail-safe.
-✅ PolicyDecisionRecord and DetectionGapRecord database persistence verified.
-✅ Risk-level constraints and human approval gates enforced by ExperimentSafetyBoundary.
-✅ State machine validates linear state progression and enforces RetestResult for VERIFIED.
-✅ SimulationAdapter abstraction cleanly isolates container execution logic.
-✅ Telemetry Normalizer strips null bytes, control characters, and normalizes Unicode (NFC).
-✅ Telemetry Normalizer enforces raw event line bounds (64KB) and field bounds (4KB).
-✅ Sigma Engine parses rules from YAML directory and evaluates matches.
-✅ Sigma Engine built-in fallback matcher provides deterministic field matching.
-✅ Telemetry Collector processes batches, stream iterators, and handles missing Redis gracefully.
-✅ RedAgentPlanner generates objective-driven scenarios and signs blueprints ONLY after deterministic safety boundary validation.
-✅ RedAgentPlanner enforces scenario risk level ceilings, human approval escalation, and exact bash allowlists.
-✅ Multi-step plans with any unauthorized action yield DENIED status and generate ZERO signed blueprints.
-✅ Critical security test proves RedAgentPlanner cannot bypass ExperimentSafetyBoundary or PolicyEngine.
-✅ DetectionGapEvaluator correlates executed ActionIR actions with MITRE ATT&CK technique IDs, normalized telemetry events, and SigmaEngine rules.
-✅ Scenario isolation prevents cross-scenario telemetry evidence leakage.
-✅ Deterministic telemetry deduplication prevents double-counting evidence.
-✅ False-positive protection ensures unrelated technique matches do not falsely mark actions as DETECTED.
-✅ Multi-action scenario evaluation preserves per-action evidence and identifies exact gap action IDs.
-✅ DetectionGapEvaluator is strictly read-only and fail-closed: cannot execute commands, modify ActionIR, modify SignedBlueprint, or bypass authorization.
-✅ BlueAgentAnalyst analyzes detection gaps and identifies evidence-backed root causes.
-✅ CandidateSigmaRule serialization preserves immutable x-sentinelforge provenance.
-✅ SigmaRuleValidator validates YAML syntax, mandatory fields, technique matching, and rejects broad rules.
-✅ RuleValidationSandbox evaluates candidate rules against malicious (must detect) and benign (must not trigger) telemetry.
-✅ RetestOrchestrator rejects invalid candidate rules and executes retests strictly through authorized architecture.
-✅ ExerciseStateMachine enforces that VERIFIED state strictly requires a valid RetestResult.
-✅ Adversarial Blue Agent inputs fail safely.
-✅ Real Docker container execution verified with hardened target (labuser, cap_drop=ALL, read-only, no-new-privileges, tmpfs /tmp).
-✅ Real closed-loop E2E: DETECTION_GAP → Blue Agent Analyst → CandidateSigmaRule → Authorized Retest → DETECTED → RetestResult → VERIFIED.
-✅ Concurrent blueprint claim atomicity (10 threads, exactly 1 succeeds).
-✅ Container security controls enforced at runtime (non-root, no docker socket, read-only filesystem).
+## Test Breakdown
+
+| Category | Tests | Status |
+|----------|-------|--------|
+| Unit: Remediation models | 11 | PASS |
+| Unit: Remediation policy | 11 | PASS |
+| Unit: Clone manager | 8 | PASS |
+| Unit: Provider factory | 9 | PASS |
+| Unit: VulnerabilityBridge | 6 | PASS |
+| Unit: Proposal generator | 3 | PASS |
+| Unit: State transitions | 11 | PASS |
+| Unit: Metadata sanitization | 4 | PASS |
+| Unit: Finding persistence | 4 | PASS |
+| Unit: Proposal persistence | 2 | PASS |
+| Unit: Attempt persistence | 5 | PASS |
+| Unit: Verification persistence | 2 | PASS |
+| Unit: Audit event persistence | 4 | PASS |
+| Unit: Idempotency | 3 | PASS |
+| Security: Remediation policy | 6 | PASS |
+| Security: Adversarial LLM | 14 | PASS |
+| Security: Security matrix | 14 | PASS |
+| Security: Tenant isolation (DB) | 4 | PASS |
+| Integration: Remediation pipeline | 4 | PASS |
+| Integration: E2E mock | 4 | PASS |
+| Integration: Generalization | 9 | PASS |
+| Integration: Orchestrator persistence | 3 | PASS |
+| Integration: Failure recovery | 2 | PASS |
+| Integration: E2E audit trail | 1 | PASS |
+| Integration: E2E real LLM | 3 | SKIP (no API keys) |
+| Integration: Docker E2E | 6 | BLOCKED (Docker daemon not running) |
+| Integration: Docker failure | 3 | BLOCKED (Docker daemon not running) |
+| Integration: Docker tenant | 1 | BLOCKED (Docker daemon not running) |
+| Detection: Normalizer + Sigma | 8 | PASS |
+| Detection: Gap evaluator | 16 | PASS |
+| Detection: Telemetry collection | 27 | PASS |
+| Red Agent: Schemas + provider | 38 | PASS |
+| Red Agent: Orchestration | 77 | PASS |
+| Blue Agent | 21 | PASS |
+| Security: Adversarial inputs | 11 | PASS |
+| Integration: Docker simulation | 8 | SKIP (no Docker) |
+| Integration: Target hardening | 4 | SKIP (no Docker) |
+| Integration: Concurrency | 2 | PASS |
+| Experiment domain | 9 | PASS |
+| Red Agent dispatch | 3 | PASS |
+
+## Skipped Tests
+- 3: Real LLM E2E (no API keys)
+- 10: Docker E2E (Docker daemon not running)
+- 5: Docker integration (no Docker daemon on Windows)
+- 4: Target hardening (no Docker)
+- 10: Other Docker-dependent tests
+- 1: Docker clone real (may run if Docker Desktop is active)
+
+## Warnings
+- 83: `datetime.datetime.utcnow()` deprecation (SQLAlchemy internal)

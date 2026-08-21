@@ -43,7 +43,15 @@ class ContainerLinuxAdapter(SimulationAdapter):
     """Concrete Docker/Linux container simulation adapter."""
 
     def __init__(self, docker_client: SafeDockerClient | None = None):
-        self._docker = docker_client or SafeDockerClient()
+        if docker_client is not None:
+            self._docker = docker_client
+        else:
+            try:
+                self._docker = SafeDockerClient()
+            except Exception:
+                # Docker engine unavailable (e.g. Docker Desktop Linux engine stopped).
+                # Adapter must remain constructible; bounded ops fail-safe via health_check().
+                self._docker = None
 
     def execute_bounded(
         self,
@@ -80,6 +88,8 @@ class ContainerLinuxAdapter(SimulationAdapter):
             pass
 
     def health_check(self) -> bool:
+        if self._docker is None:
+            return False
         try:
             self._docker._get_target_container()
             return True

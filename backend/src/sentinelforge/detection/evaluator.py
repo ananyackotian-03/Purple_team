@@ -17,8 +17,8 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 import json
 import logging
-from typing import List, Optional, Set, Union
-from uuid import UUID
+from typing import Dict, List, Optional, Set, Union
+from uuid import UUID, uuid4
 
 from sentinelforge.domain.action_ir import ActionIR
 from sentinelforge.detection.normalizer import NormalizedEvent
@@ -329,3 +329,208 @@ class DetectionGapEvaluator:
             return True
 
         return False
+
+
+# ---------------------------------------------------------------------------
+# Purple Evaluation — Deterministic experiment-level detection verdict
+# ---------------------------------------------------------------------------
+
+@dataclass
+class PurpleEvaluation:
+    """Deterministic evaluation of one eligible experiment/scenario.
+
+    One PurpleEvaluation per experiment/scenario — NEVER per action.
+    The `expected_detection` field is metadata only and MUST NOT
+    influence the `detection_status` value.
+    """
+    evaluation_id: str
+    experiment_id: str              # scenario_id
+    execution_id: str               # blueprint_id
+    organization_id: str
+    technique_id: str
+    detection_status: str           # DETECTED | NOT_DETECTED | DETECTION_GAP
+    matched_rule_ids: List[str] = field(default_factory=list)
+    evidence_event_ids: List[str] = field(default_factory=list)
+    expected_detection: bool = False
+    gap_reason: Optional[str] = None
+    detection_latency_ms: Optional[float] = None
+    evaluated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat() + "Z")
+
+    def to_dict(self) -> dict:
+        return {
+            "evaluation_id": self.evaluation_id,
+            "experiment_id": self.experiment_id,
+            "execution_id": self.execution_id,
+            "organization_id": self.organization_id,
+            "technique_id": self.technique_id,
+            "detection_status": self.detection_status,
+            "matched_rule_ids": self.matched_rule_ids,
+            "evidence_event_ids": self.evidence_event_ids,
+            "expected_detection": self.expected_detection,
+            "gap_reason": self.gap_reason,
+            "detection_latency_ms": self.detection_latency_ms,
+            "evaluated_at": self.evaluated_at,
+        }
+
+
+@dataclass
+class CoverageReport:
+    """Aggregate detection coverage across eligible experiments for one organization.
+
+    Coverage = detected eligible experiments / eligible experiments * 100.
+    Safe for zero eligible experiments (coverage_pct = 0.0).
+    """
+    report_id: str
+    organization_id: str
+    total_experiments: int
+    detected_experiments: int
+    missed_experiments: int
+    gap_experiments: int
+    coverage_pct: float
+    technique_coverage: Dict[str, bool] = field(default_factory=dict)
+    evaluations: List[PurpleEvaluation] = field(default_factory=list)
+    generated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat() + "Z")
+
+    def to_dict(self) -> dict:
+        return {
+            "report_id": self.report_id,
+            "organization_id": self.organization_id,
+            "total_experiments": self.total_experiments,
+            "detected_experiments": self.detected_experiments,
+            "missed_experiments": self.missed_experiments,
+            "gap_experiments": self.gap_experiments,
+            "coverage_pct": self.coverage_pct,
+            "technique_coverage": self.technique_coverage,
+            "evaluated_at": self.generated_at,
+        }
+
+
+class PurpleEvaluator:
+    """Deterministic Purple Evaluation engine.
+
+    Consumes existing ScenarioDetectionOutcome data and produces
+    PurpleEvaluation verdicts and CoverageReport metrics.
+
+    SECURITY INVARIANTS:
+    - detection_status is derived SOLELY from the DetectionEngine result.
+    - expected_detection is metadata only and NEVER influences detection_status.
+    - Coverage is computed deterministically; no LLM participation.
+    - Organization scoping is enforced; no cross-tenant aggregation.
+    """
+
+    def evaluate(
+        self,
+        scenario_outcome: ScenarioDetectionOutcome,
+        actions: List[ActionIR],
+        execution_id: Optional[str] = None,
+        expected_detection: bool = False,
+    ) -> PurpleEvaluation:
+        """Produce a single PurpleEvaluation for one experiment/scenario.
+
+        Args:
+            scenario_outcome: Detection result from DetectionGapEvaluator.
+            actions: Executed ActionIR actions for this experiment.
+            execution_id: Optional blueprint/execution identifier.
+            expected_detection: LLM metadata claim — never determines status.
+
+        Returns:
+            PurpleEvaluation with deterministic detection_status.
+        """
+        org_id = str(scenario_outcome.organization_id) if scenario_outcome.organization_id else ""
+        scenario_id = str(scenario_outcome.scenario_id)
+        ts_now = datetime.now(timezone.utc).isoformat() + "Z"
+
+        # Aggregate matched rules and evidence from ALL action outcomes
+        all_matched_rules: List[str] = []
+        all_evidence_ids: List[str] = []
+        all_technique_ids: List[str] = []
+        gap_reasons: List[str] = []
+
+        for act_out in scenario_outcome.action_outcomes:
+            for rid in act_out.matched_rule_ids:
+                if rid not in all_matched_rules:
+                    all_matched_rules.append(rid)
+            for eid in act_out.evidence_event_ids:
+                if eid not in all_evidence_ids:
+                    all_evidence_ids.append(eid)
+            if act_out.technique_id and act_out.technique_id not in all_technique_ids:
+                all_technique_ids.append(act_out.technique_id)
+            if act_out.outcome != DetectionOutcome.DETECTED and act_out.reason:
+                gap_reasons.append(act_out.reason)
+
+        # Derive detection_status from ACTUAL detection outcome only
+        detection_status = scenario_outcome.overall_outcome.value
+
+        # Primary technique: most common or first action technique
+        primary_technique = all_technique_ids[0] if all_technique_ids else "unknown"
+
+        # Gap reason: aggregate non-detected reasons
+        gap_reason = "; ".join(gap_reasons) if gap_reasons else None
+
+        # Calculate detection latency from scenario timestamps if available
+        latency_ms = None
+        if scenario_outcome.action_outcomes:
+            try:
+                first_ts = scenario_outcome.action_outcomes[0].timestamp
+                # Strip trailing "Z" if present, as fromisoformat handles +00:00
+                ts_clean = first_ts.rstrip("Z")
+                now_clean = ts_now.rstrip("Z")
+                start = datetime.fromisoformat(ts_clean)
+                end = datetime.fromisoformat(now_clean)
+                latency_ms = (end - start).total_seconds() * 1000
+            except (ValueError, TypeError):
+                latency_ms = None
+
+        return PurpleEvaluation(
+            evaluation_id=str(uuid4()),
+            experiment_id=scenario_id,
+            execution_id=execution_id or "",
+            organization_id=org_id,
+            technique_id=primary_technique,
+            detection_status=detection_status,
+            matched_rule_ids=all_matched_rules,
+            evidence_event_ids=all_evidence_ids,
+            expected_detection=expected_detection,
+            gap_reason=gap_reason,
+            detection_latency_ms=latency_ms,
+            evaluated_at=ts_now,
+        )
+
+    def compute_coverage(
+        self,
+        evaluations: List[PurpleEvaluation],
+        organization_id: str,
+    ) -> CoverageReport:
+        """Aggregate PurpleEvaluation records into a CoverageReport.
+
+        Coverage = detected eligible experiments / eligible experiments * 100.
+        Organization scoping: only evaluations matching organization_id are counted.
+        """
+        org_evals = [e for e in evaluations if e.organization_id == organization_id]
+        total = len(org_evals)
+        detected = sum(1 for e in org_evals if e.detection_status == DetectionOutcome.DETECTED.value)
+        missed = sum(1 for e in org_evals if e.detection_status == DetectionOutcome.NOT_DETECTED.value)
+        gap = sum(1 for e in org_evals if e.detection_status == DetectionOutcome.DETECTION_GAP.value)
+
+        coverage_pct = (detected / total * 100.0) if total > 0 else 0.0
+
+        # Technique-level coverage: True if any evaluation for that technique is DETECTED
+        tech_coverage: Dict[str, bool] = {}
+        for e in org_evals:
+            tech = e.technique_id
+            if tech not in tech_coverage:
+                tech_coverage[tech] = False
+            if e.detection_status == DetectionOutcome.DETECTED.value:
+                tech_coverage[tech] = True
+
+        return CoverageReport(
+            report_id=str(uuid4()),
+            organization_id=organization_id,
+            total_experiments=total,
+            detected_experiments=detected,
+            missed_experiments=missed,
+            gap_experiments=gap,
+            coverage_pct=coverage_pct,
+            technique_coverage=tech_coverage,
+            evaluations=org_evals,
+        )

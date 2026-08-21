@@ -188,9 +188,19 @@ def test_unicode_nfc_normalization_and_homoglyph_distinction():
 
 def test_container_adapter_cleanup():
     from sentinelforge.simulation.adapter import ContainerLinuxAdapter
-    adapter = ContainerLinuxAdapter()
-    # cleanup() must execute fail-safe without throwing exception regardless of container availability
+    from unittest.mock import Mock
+
+    mock_client = Mock()
+    mock_client.execute_bounded.return_value = (0, b"", b"", False, False)
+    adapter = ContainerLinuxAdapter(docker_client=mock_client)
     adapter.cleanup()
+
+    mock_client.execute_bounded.assert_called_once_with(
+        executable="/usr/bin/bash",
+        arguments=["-c", "rm -rf /tmp/sentinelforge_* 2>/dev/null || true"],
+        run_as_user="labuser",
+        timeout=10,
+    )
 
 
 def test_policy_decision_and_detection_gap_persistence():

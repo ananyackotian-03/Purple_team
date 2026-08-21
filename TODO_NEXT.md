@@ -1,25 +1,31 @@
-# Next Steps — SentinelForge (PRD V2 Reconciled)
+# SENTINELFORGE — TODO NEXT
 
-1. **Minimal Surgical Reconciliation Pass ✅ COMPLETE**:
-   - Updated `ActionIR` schema with explicit `max_execution_seconds` & `max_stdout_bytes` Pydantic bounds.
-   - Added Unicode NFC normalization to `TelemetryNormalizer` with explicit homoglyph non-collapse test.
-   - Implemented `ContainerLinuxAdapter.cleanup()` for bounded target container cleanup.
-   - Added `DetectionGapRecord` DB model and `PolicyDecisionRecord` database persistence.
-   - Added Alembic migration framework (`001_reconciliation_schema_update.py`).
-   - Verified 109/109 tests PASSING (75 unit + 34 integration).
+## Current Milestone: COMPLETE
+Real Docker Isolation + Clone-Only Remediation + E2E Security Validation
 
-2. **Next Milestone: Real LLM-Based Red Agent (PLANNED)**:
-   - Build objective-driven LLM adversarial scenario planner (`agents/red_agent.py` LLM integration).
-   - Input: `SecurityObjective`, authorized cyber range, past experiment history, current detection coverage.
-   - Output: `AdversarialScenario` and `ExecutionPlan`.
-   - Security Invariant: LLM output is UNTRUSTED. Must route strictly through `ExperimentSafetyBoundary` → `PolicyEngine` → `ActionIR` → HMAC `SignedBlueprint`.
+## Status: DOCKER-DAEMON-BLOCKED
+- Docker E2E tests written and verified (correctly skip when daemon unavailable)
+- All existing 394 tests passing
+- Docker Desktop installed but daemon not started
 
-3. **Subsequent Milestone: Real LLM-Based Blue Agent (PLANNED)**:
-   - Build LLM-driven detection gap analyst (`agents/blue_agent.py` LLM integration).
-   - Input: `DetectionGapRecord`, correlated telemetry evidence, existing rules.
-   - Output: Candidate Sigma detection rules with immutable `x-sentinelforge` provenance.
-   - Security Invariant: Candidate rules must pass `SigmaRuleValidator` and `RuleValidationSandbox` prior to `RetestOrchestrator`.
+## To Enable Docker E2E
+1. Start Docker Desktop
+2. Run: `pytest tests/integration/test_docker_e2e.py -v`
+3. All 10 Docker tests should pass
 
-4. **Continuous Adaptive Loop & Dashboard (FUTURE)**:
-   - Red AI adapts strategy upon Blue detection improvement.
-   - React dashboard visualization & FastAPI REST endpoints.
+## Remaining Work
+
+### To Enable Live LLM
+1. Install SDK: `pip install openai` or `pip install anthropic`
+2. Set environment variable: `SENTINELFORGE_LLM_PROVIDER=openai`
+3. Set API key: `OPENAI_API_KEY=sk-...`
+4. Run: `pytest tests/integration/test_e2e_real_llm.py -v`
+
+### Future Enhancements (Not in Current Scope)
+- [ ] Falco/eBPF telemetry (requires Linux environment)
+- [ ] Cross-session novelty seeding
+- [ ] Production PostgreSQL deployment
+- [ ] Blue LLM Agent
+- [ ] Multi-vulnerability classes
+- [ ] Dashboard/UI
+- [ ] Production deployment

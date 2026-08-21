@@ -87,6 +87,57 @@ class TelemetryCollector:
 
         return results
 
+    def collect(self, raw_falco_json: str,
+                correlation_id: Optional[str] = None) -> Optional[NormalizedEvent]:
+        """Collect a single raw Falco JSON event through the telemetry transport.
+
+        Transport-only leg of the pipeline (Step 2B):
+        Raw Falco JSON -> TelemetryNormalizer -> NormalizedEvent -> Redis stream.
+
+        This performs NO detection decisions; it only normalizes and publishes
+        to the existing telemetry stream. Returns the NormalizedEvent (the
+        hand-off object for the detection/evaluation boundary) or None when the
+        event is rejected (malformed, oversized, missing required fields).
+
+        Redis is transport only and at-least-once: publish failures are logged
+        and never raised, so collection never blocks or crashes the caller.
+        A malformed/oversized event is rejected BEFORE publish, so the stream
+        never carries un-processable payloads (a precondition for
+        acknowledge-after-processing consumers).
+        """
+        event = self.normalizer.normalize(raw_falco_json)
+        if event is None:
+            return None
+
+        if correlation_id is not None:
+            event.correlation_id = correlation_id
+
+        self._publish_event_to_redis(event)
+        return event
+
+    def _publish_event_to_redis(self, event: NormalizedEvent):
+        """Publish a NormalizedEvent to the telemetry stream (transport only).
+
+        Uses the same stream and message shape as the detection path, tagged
+        with `kind: telemetry` so consumers can distinguish raw telemetry from
+        DetectionResult payloads without a second stream.
+        """
+        if self.redis is None:
+            return
+
+        try:
+            payload = json.dumps({"kind": "telemetry", "data": event.to_dict()})
+            if len(payload.encode("utf-8")) > MAX_REDIS_MESSAGE_BYTES:
+                logger.warning(
+                    "Skipping oversized telemetry message for event %s",
+                    event.event_id,
+                )
+                return
+
+            self.redis.xadd(REDIS_STREAM, {"data": payload})
+        except Exception as exc:
+            logger.error("Failed to publish telemetry to Redis: %s", exc)
+
     def process_stream(self, lines_iterator, correlation_id: Optional[str] = None,
                        on_result: Optional[Callable] = None) -> dict:
         """Process multiple raw Falco JSON lines from an iterator.

@@ -146,3 +146,42 @@ class DetectionResult(Base):
     timestamp = Column(DateTime, nullable=False)
     source = Column(String, nullable=False)
 
+class RedAgentStrategyRecord(Base):
+    """Strategic memory record for Red Agent strategy fingerprint tracking.
+
+    Tenant isolation is enforced by the mandatory `organization_id` column.
+    The `fingerprint_hash` is the deterministic composite hash produced by
+    StrategyFingerprint.create(); it is used by NoveltyEvaluator to skip
+    DUPLICATE/SIMILAR proposals before they reach the safety boundary.
+    """
+    __tablename__ = 'red_agent_strategies'
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id = Column(UUID(as_uuid=True), ForeignKey('organizations.id'), nullable=False)
+    objective_id = Column(UUID(as_uuid=True), nullable=False)
+    scenario_id = Column(UUID(as_uuid=True), nullable=False)
+    technique_id = Column(String, nullable=False)
+    fingerprint_hash = Column(String, nullable=False, index=True)
+    command_pattern = Column(Text, nullable=False)
+    outcome = Column(String, nullable=True)  # ALLOWED, DENIED, EXECUTED, DETECTED, DETECTION_GAP, NOT_DETECTED
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class PurpleEvaluationRecord(Base):
+    """Persistent Purple Evaluation record — one per experiment/scenario.
+
+    Tenant isolation is enforced by the mandatory `organization_id` column.
+    Stores the deterministic detection verdict produced by PurpleEvaluator.
+    """
+    __tablename__ = 'purple_evaluations'
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id = Column(UUID(as_uuid=True), ForeignKey('organizations.id'), nullable=False)
+    experiment_id = Column(UUID(as_uuid=True), nullable=False)
+    execution_id = Column(UUID(as_uuid=True), nullable=True)
+    technique_id = Column(String, nullable=False)
+    detection_status = Column(String, nullable=False)  # DETECTED, NOT_DETECTED, DETECTION_GAP
+    matched_rule_ids = Column(Text, nullable=True)     # JSON list
+    evidence_event_ids = Column(Text, nullable=True)   # JSON list
+    expected_detection = Column(Boolean, nullable=False, default=False)
+    gap_reason = Column(Text, nullable=True)
+    detection_latency_ms = Column(Integer, nullable=True)
+    evaluated_at = Column(DateTime, default=datetime.utcnow)
+

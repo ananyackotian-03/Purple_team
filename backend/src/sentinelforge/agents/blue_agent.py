@@ -27,6 +27,7 @@ from sentinelforge.agents.red_agent import RedAgentPlanner, PlanResult
 from sentinelforge.detection.evaluator import (
     ActionDetectionOutcome,
     DetectionGapEvaluator,
+    PurpleEvaluation,
     ScenarioDetectionOutcome,
 )
 from sentinelforge.detection.normalizer import NormalizedEvent
@@ -140,6 +141,91 @@ class BlueAgentAnalyst:
                 db_session.commit()
 
         return results
+
+    def analyze_purple_evaluation(
+        self,
+        purple_eval: PurpleEvaluation,
+        db_session=None,
+    ) -> Optional[GapAnalysisResult]:
+        """Analyze a PurpleEvaluation to produce a structured GapAnalysisResult.
+
+        Only produces analysis for non-DETECTED evaluations. For DETECTED
+        evaluations, returns None (no gap to analyze).
+
+        The purple evaluation's detection_status is authoritative and MUST NOT
+        be modified by this method. The analyst only reasons over the
+        already-established result.
+
+        Args:
+            purple_eval: A deterministic PurpleEvaluation result.
+            db_session: Optional SQLAlchemy session for persistence.
+
+        Returns:
+            GapAnalysisResult for non-DETECTED evaluations, or None for DETECTED.
+        """
+        if purple_eval.detection_status == DetectionOutcome.DETECTED.value:
+            return None
+
+        tech_id = str(purple_eval.technique_id or "unknown").strip()
+        status = purple_eval.detection_status
+        evidence = purple_eval.evidence_event_ids or []
+        matched = purple_eval.matched_rule_ids or []
+        gap_reason = purple_eval.gap_reason or ""
+
+        # Determine evidence-backed root cause from PurpleEvaluation fields
+        if tech_id == "unknown" or not tech_id:
+            root_cause = "INSUFFICIENT_TECHNIQUE_METADATA"
+            reason = f"Scenario {purple_eval.experiment_id} lacks valid MITRE ATT&CK technique metadata"
+        elif not evidence:
+            root_cause = "NO_TELEMETRY"
+            reason = f"No telemetry events were captured for scenario {purple_eval.experiment_id} (technique {tech_id})"
+        elif "unrelated" in gap_reason.lower():
+            root_cause = "UNRELATED_RULE_MATCH"
+            reason = gap_reason
+        elif status in (DetectionOutcome.NOT_DETECTED.value, DetectionOutcome.DETECTION_GAP.value):
+            root_cause = "NO_RULE_MATCH"
+            reason = gap_reason or f"Telemetry observed for scenario {purple_eval.experiment_id}, but no Sigma rule matched technique {tech_id}"
+        else:
+            root_cause = "INSUFFICIENT_RULE_COVERAGE"
+            reason = gap_reason or f"Incomplete detection rule coverage for technique {tech_id}"
+
+        # Use evaluation_id as action_id since PurpleEvaluation is scenario-level
+        action_id_str = purple_eval.evaluation_id
+
+        gap_res = GapAnalysisResult(
+            scenario_id=purple_eval.experiment_id,
+            action_id=action_id_str,
+            technique_id=tech_id,
+            original_outcome=status,
+            evidence_event_ids=[str(e) for e in evidence],
+            matched_rule_ids=[str(m) for m in matched],
+            root_cause=root_cause,
+            reason=reason,
+        )
+
+        if db_session:
+            import json as json_lib
+            from sentinelforge.db.models import DetectionGapRecord
+            org_uuid = UUID(str(purple_eval.organization_id)) if purple_eval.organization_id else UUID(int=0)
+            scenario_uuid = UUID(purple_eval.experiment_id) if purple_eval.experiment_id else UUID(int=0)
+            action_uuid = UUID(action_id_str) if action_id_str else UUID(int=0)
+            rec = DetectionGapRecord(
+                id=UUID(gap_res.gap_id),
+                organization_id=org_uuid,
+                scenario_id=scenario_uuid,
+                action_id=action_uuid,
+                technique_id=gap_res.technique_id,
+                original_outcome=gap_res.original_outcome,
+                evidence_event_ids=json_lib.dumps(gap_res.evidence_event_ids),
+                matched_rule_ids=json_lib.dumps(gap_res.matched_rule_ids),
+                root_cause=gap_res.root_cause,
+                reason=gap_res.reason,
+                remediation_status="OPEN",
+            )
+            db_session.add(rec)
+            db_session.commit()
+
+        return gap_res
 
     def propose_candidate_rule(
         self,

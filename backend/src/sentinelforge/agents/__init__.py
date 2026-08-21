@@ -8,6 +8,12 @@ from sentinelforge.agents.blue_agent import (
     RuleValidationSandbox,
     RetestOrchestrator,
 )
+from sentinelforge.agents.red import (
+    RedAgent,
+    RedAgentConfig,
+    RedAgentDecision,
+    RedAgentStateMachine,
+)
 
 __all__ = [
     "RedAgentPlanner",
@@ -18,5 +24,9 @@ __all__ = [
     "SigmaRuleValidator",
     "RuleValidationSandbox",
     "RetestOrchestrator",
+    "RedAgent",
+    "RedAgentConfig",
+    "RedAgentDecision",
+    "RedAgentStateMachine",
 ]
 
