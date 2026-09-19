@@ -30,7 +30,7 @@ from sentinelforge.simulation.adapter import SimulationAdapter
 from sentinelforge.simulation.replay import SimulationRepository
 from sentinelforge.simulation.worker import SimulationWorker
 
-SIGNER_KEY = "sentinelforge-secret-key-v1"
+SIGNER_KEY = "sentinelforge-test-signing-key-not-for-production"
 SIGNER_KEY_ID = "key1"
 ORG_ID = uuid.UUID(int=0)
 

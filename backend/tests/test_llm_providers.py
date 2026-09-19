@@ -20,6 +20,7 @@ local-endpoint network tests are intentionally NOT included so the suite has no
 network or paid-API dependency.
 """
 
+import importlib
 import json
 
 import pytest
@@ -364,9 +365,17 @@ class TestVendorDriverConstruction:
         AnthropicProvider(api_key="k", model="claude-3-5-sonnet")
         GeminiProvider(api_key="k", model="gemini-2.0-flash")
 
-    def test_missing_sdk_raises_on_generate(self):
-        """Real-provider failure path in this env: SDK absent -> ProviderAPIError."""
+    def test_missing_sdk_raises_on_generate(self, monkeypatch):
+        """Simulate SDK absent -> ProviderAPIError with SDK message."""
+        def _fail_import(name, *args, **kwargs):
+            if name == "openai":
+                raise ImportError("No module named 'openai'")
+            return _orig_import(name, *args, **kwargs)
+
+        _orig_import = importlib.import_module
+        monkeypatch.setattr(importlib, "import_module", _fail_import)
         provider = OpenAIProvider(api_key="k", model="gpt-4o")
+        provider._sdk = None  # reset cached SDK
         with pytest.raises(ProviderAPIError) as exc_info:
             provider.generate("p", "sys")
         assert "SDK" in str(exc_info.value)

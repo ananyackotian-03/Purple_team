@@ -1,0 +1,22 @@
+title: Command Injection via Web Application
+id: sentinelforge-web-cmd-injection
+status: experimental
+description: Detects command injection attempts targeting web application endpoints
+logsource:
+    category: process_creation
+    product: linux
+detection:
+    sel_curl:
+        ProcessName: bash
+    sel_ping:
+        CommandLine|contains: api/ping
+    sel_post:
+        CommandLine|contains: POST
+    condition: sel_curl and sel_ping and sel_post
+level: high
+tags:
+    - attack.execution
+    - attack.t1059
+x-sentinelforge:
+    rule_id: sentinelforge-web-cmd-injection
+    technique_id: T1059

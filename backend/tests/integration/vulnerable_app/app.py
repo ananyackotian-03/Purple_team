@@ -1,11 +1,12 @@
 """Vulnerable Flask Application for SentinelForge E2E Testing.
 
-This application contains a deliberate SQL injection vulnerability in the
-login endpoint for testing the remediation pipeline. DO NOT deploy this
-to production.
+This application contains deliberate vulnerabilities for testing the
+Cyber Immune remediation pipeline. DO NOT deploy this to production.
 
 Security issues present (intentional):
-- SQL injection in login (A03:2021-Injection)
+- SQL injection in login and search (A03:2021-Injection)
+- Command injection in ping endpoint (A03:2021-Injection)
+- Path traversal in file read endpoint (A01:2021-Broken Access Control)
 - Hardcoded secret key
 - No CSRF protection
 - Debug mode enabled
@@ -14,6 +15,7 @@ Security issues present (intentional):
 import logging
 import os
 import sqlite3
+import subprocess
 import time
 from datetime import datetime
 
@@ -239,6 +241,74 @@ def api_audit_log():
     ).fetchall()
     conn.close()
     return jsonify([dict(l) for l in logs])
+
+
+# ---------------------------------------------------------------------------
+# Routes — Command Injection vulnerability (A03:2021-Injection)
+# ---------------------------------------------------------------------------
+
+@app.route("/api/ping", methods=["POST"])
+def api_ping():
+    """VULNERABLE: Command injection via unsanitized user input in subprocess."""
+    data = request.get_json(silent=True) or {}
+    host = data.get("host", "")
+    if not host:
+        return jsonify({"error": "Missing 'host' parameter"}), 400
+
+    log_audit("PING_REQUEST", detail=f"host={host}")
+
+    # VULNERABLE: Direct string interpolation into shell command
+    try:
+        result = subprocess.run(
+            f"ping -c 1 {host}",
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        log_audit("PING_COMPLETED", detail=f"host={host} exit={result.returncode}")
+        return jsonify({
+            "host": host,
+            "output": result.stdout,
+            "exit_code": result.returncode,
+        })
+    except subprocess.TimeoutExpired:
+        log_audit("PING_TIMEOUT", detail=f"host={host}")
+        return jsonify({"error": "Ping timed out"}), 504
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+# Routes — Path Traversal vulnerability (A01:2021-Broken Access Control)
+# ---------------------------------------------------------------------------
+
+@app.route("/api/files/read", methods=["POST"])
+def api_files_read():
+    """VULNERABLE: Path traversal via unsanitized file path."""
+    data = request.get_json(silent=True) or {}
+    filepath = data.get("path", "")
+    if not filepath:
+        return jsonify({"error": "Missing 'path' parameter"}), 400
+
+    log_audit("FILE_READ_REQUEST", detail=f"path={filepath}")
+
+    # VULNERABLE: No path sanitization, allows ../../etc/passwd etc.
+    try:
+        with open(filepath, "r") as f:
+            content = f.read(8192)
+        log_audit("FILE_READ_COMPLETED", detail=f"path={filepath} length={len(content)}")
+        return jsonify({
+            "path": filepath,
+            "content": content,
+            "truncated": len(content) == 8192,
+        })
+    except FileNotFoundError:
+        return jsonify({"error": f"File not found: {filepath}"}), 404
+    except PermissionError:
+        return jsonify({"error": f"Permission denied: {filepath}"}), 403
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":

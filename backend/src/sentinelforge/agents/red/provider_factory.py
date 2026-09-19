@@ -71,7 +71,6 @@ def create_provider_from_env(
         base_url = os.environ.get("OPENAI_BASE_URL")
         try:
             if base_url:
-                provider = OpenAIProvider(api_key=api_key, model=model)
                 # OpenAIProvider doesn't accept base_url directly; use
                 # OpenAICompatibleProvider for custom base URLs instead.
                 provider = OpenAICompatibleProvider(

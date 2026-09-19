@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Defense &amp; Retests - SentinelForge</title>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=JetBrains+Mono:wght@400;450&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Configuration -->
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "outline": "#88919d",
+                        "primary-fixed-dim": "#98cbff",
+                        "surface-variant": "#353437",
+                        "inverse-on-surface": "#303032",
+                        "on-primary-fixed": "#001d33",
+                        "surface-container": "#201f21",
+                        "on-secondary": "#003824",
+                        "on-secondary-fixed": "#002113",
+                        "on-tertiary-fixed": "#2a1700",
+                        "outline-variant": "#3f4852",
+                        "surface-container-lowest": "#0e0e10",
+                        "error-container": "#93000a",
+                        "on-primary-fixed-variant": "#004a77",
+                        "surface-dim": "#131315",
+                        "primary-container": "#00a3ff",
+                        "on-secondary-fixed-variant": "#005236",
+                        "on-surface": "#e5e1e4",
+                        "surface-bright": "#39393b",
+                        "tertiary-fixed": "#ffddb8",
+                        "tertiary-fixed-dim": "#ffb95f",
+                        "on-error-container": "#ffdad6",
+                        "surface-tint": "#98cbff",
+                        "on-tertiary-container": "#4c2d00",
+                        "surface-container-low": "#1b1b1d",
+                        "background": "#131315",
+                        "on-secondary-container": "#00311f",
+                        "on-primary-container": "#00375a",
+                        "on-primary": "#003354",
+                        "secondary-fixed-dim": "#4edea3",
+                        "surface-container-highest": "#353437",
+                        "on-error": "#690005",
+                        "on-background": "#e5e1e4",
+                        "surface-container-high": "#2a2a2c",
+                        "on-tertiary-fixed-variant": "#653e00",
+                        "secondary-fixed": "#6ffbbe",
+                        "secondary-container": "#00a572",
+                        "tertiary": "#ffb95f",
+                        "secondary": "#4edea3",
+                        "on-surface-variant": "#bec7d4",
+                        "surface": "#131315",
+                        "on-tertiary": "#472a00",
+                        "error": "#ffb4ab",
+                        "inverse-surface": "#e5e1e4",
+                        "inverse-primary": "#00629d",
+                        "tertiary-container": "#da8b00",
+                        "primary": "#98cbff",
+                        "primary-fixed": "#cfe5ff"
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    spacing: {
+                        "container-padding": "24px",
+                        "stack-lg": "32px",
+                        "unit": "4px",
+                        "stack-md": "16px",
+                        "gutter": "16px",
+                        "stack-sm": "8px"
+                    },
+                    fontFamily: {
+                        "label-caps": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "display-lg": ["Inter"],
+                        "body-base": ["Inter"],
+                        "headline-md-mobile": ["Inter"],
+                        "data-mono-sm": ["JetBrains Mono"],
+                        "data-mono": ["JetBrains Mono"]
+                    },
+                    fontSize: {
+                        "label-caps": ["11px", { lineHeight: "16px", letterSpacing: "0.05em", fontWeight: "700" }],
+                        "headline-md": ["24px", { lineHeight: "32px", letterSpacing: "-0.01em", fontWeight: "600" }],
+                        "display-lg": ["48px", { lineHeight: "56px", letterSpacing: "-0.02em", fontWeight: "700" }],
+                        "body-base": ["14px", { lineHeight: "20px", fontWeight: "400" }],
+                        "headline-md-mobile": ["20px", { lineHeight: "28px", fontWeight: "600" }],
+                        "data-mono-sm": ["11px", { lineHeight: "16px", fontWeight: "400" }],
+                        "data-mono": ["13px", { lineHeight: "18px", fontWeight: "450" }]
+                    },
+                    boxShadow: {
+                        'active-glow': '0 0 12px #00A3FF26',
+                        'success-glow': '0 0 12px rgba(78, 222, 163, 0.25)',
+                    }
+                }
+            }
+        };
+    </script>
+<style>
+        body {
+            background-color: #0A0A0C;
+            color: #e5e1e4;
+        }
+        
+        .soc-card {
+            background-color: #121214;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+        
+        .soc-card-header {
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+        
+        .progress-line {
+            height: 2px;
+            background: linear-gradient(90deg, rgba(255,180,171,0.3) 0%, rgba(152,203,255,0.3) 50%, rgba(78,222,163,0.8) 100%);
+        }
+        
+        .code-block {
+            background-color: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+        
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0A0A0C;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #3f4852;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #88919d;
+        }
+    </style>
+</head>
+<body class="flex h-screen overflow-hidden antialiased text-body-base font-body-base bg-background">
+<!-- SideNavBar -->
+<aside class="hidden md:flex flex-col h-full py-stack-md overflow-y-auto docked left-0 h-screen w-64 border-r border-outline-variant bg-surface-container dark:bg-surface-container z-40">
+<div class="px-container-padding mb-stack-lg">
+<h1 class="text-headline-md font-headline-md text-primary tracking-tighter">SENTINELFORGE</h1>
+<p class="text-label-caps font-label-caps text-on-surface-variant mt-1">CYBER IMMUNE SYSTEM</p>
+</div>
+<nav class="flex-1 px-stack-sm">
+<ul class="space-y-1">
+<li><a class="flex items-center px-4 py-3 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all" href="#"><span class="material-symbols-outlined mr-3">dashboard</span><span class="text-label-caps font-label-caps">Overview</span></a></li>
+<li><a class="flex items-center px-4 py-3 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all" href="#"><span class="material-symbols-outlined mr-3">memory</span><span class="text-label-caps font-label-caps">Digital Twin</span></a></li>
+<li><a class="flex items-center px-4 py-3 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all" href="#"><span class="material-symbols-outlined mr-3">target</span><span class="text-label-caps font-label-caps">Security Objectives</span></a></li>
+<li><a class="flex items-center px-4 py-3 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all" href="#"><span class="material-symbols-outlined mr-3">science</span><span class="text-label-caps font-label-caps">Experiments</span></a></li>
+<li><a class="flex items-center px-4 py-3 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all" href="#"><span class="material-symbols-outlined mr-3">radar</span><span class="text-label-caps font-label-caps">Detection</span></a></li>
+<li><a class="flex items-center px-4 py-3 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all" href="#"><span class="material-symbols-outlined mr-3">search_off</span><span class="text-label-caps font-label-caps">Detection Gaps</span></a></li>
+<li><a class="flex items-center px-4 py-3 rounded bg-primary-container text-on-primary-container font-bold border-l-4 border-primary shadow-active-glow opacity-80 duration-100" href="#"><span class="material-symbols-outlined mr-3" style="font-variation-settings: 'FILL' 1;">security</span><span class="text-label-caps font-label-caps">Defense &amp; Retests</span></a></li>
+<li><a class="flex items-center px-4 py-3 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all" href="#"><span class="material-symbols-outlined mr-3">history</span><span class="text-label-caps font-label-caps">Immune Memory</span></a></li>
+<li><a class="flex items-center px-4 py-3 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all" href="#"><span class="material-symbols-outlined mr-3">psychology</span><span class="text-label-caps font-label-caps">Adaptive Testing</span></a></li>
+<li><a class="flex items-center px-4 py-3 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all" href="#"><span class="material-symbols-outlined mr-3">biotech</span><span class="text-label-caps font-label-caps">Telemetry</span></a></li>
+<li><a class="flex items-center px-4 py-3 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all" href="#"><span class="material-symbols-outlined mr-3">admin_panel_settings</span><span class="text-label-caps font-label-caps">Security Controls</span></a></li>
+<li><a class="flex items-center px-4 py-3 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all" href="#"><span class="material-symbols-outlined mr-3">fact_check</span><span class="text-label-caps font-label-caps">Audit &amp; Evidence</span></a></li>
+</ul>
+</nav>
+<div class="px-container-padding mt-stack-lg border-t border-outline-variant pt-stack-md">
+<p class="text-label-caps font-label-caps text-outline mb-3">INFRASTRUCTURE</p>
+<ul class="space-y-1">
+<li><a class="flex items-center px-2 py-2 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all" href="#"><span class="material-symbols-outlined mr-2 text-[18px]">dns</span><span class="text-label-caps font-label-caps">System</span></a></li>
+<li><a class="flex items-center px-2 py-2 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all" href="#"><span class="material-symbols-outlined mr-2 text-[18px]">api</span><span class="text-label-caps font-label-caps">API</span></a></li>
+<li><a class="flex items-center px-2 py-2 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all" href="#"><span class="material-symbols-outlined mr-2 text-[18px]">developer_board</span><span class="text-label-caps font-label-caps">Docker</span></a></li>
+<li><a class="flex items-center px-2 py-2 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all" href="#"><span class="material-symbols-outlined mr-2 text-[18px]">smart_toy</span><span class="text-label-caps font-label-caps">LLM</span></a></li>
+</ul>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 flex flex-col h-full overflow-hidden relative">
+<!-- TopNavBar -->
+<header class="flex justify-between items-center w-full px-container-padding h-16 z-50 bg-surface-container-lowest border-b border-outline-variant docked full-width top-0">
+<div class="md:hidden flex items-center">
+<span class="text-headline-md-mobile font-headline-md-mobile tracking-tighter text-on-surface dark:text-on-surface">SENTINELFORGE</span>
+</div>
+<div class="hidden md:flex flex-1"></div>
+<div class="flex items-center space-x-4">
+<button class="p-2 text-on-surface-variant hover:bg-surface-variant/50 transition-colors rounded-full">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="p-2 text-on-surface-variant hover:bg-surface-variant/50 transition-colors rounded-full">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<button class="px-4 py-2 bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 transition-colors rounded flex items-center shadow-active-glow">
+<span class="text-label-caps font-label-caps">LAB ENVIRONMENT</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-surface-variant border border-outline-variant overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A detailed headshot of a female cybersecurity analyst in a dimly lit, high-tech operations center. She is illuminated by the cool blue light of surrounding monitors. Her expression is focused and professional. The aesthetic is modern, corporate, and technically precise, using deep blacks and cool blue accents." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCe5hUVpJkBBvTfsMDy7ZrP6syFi3-jX42MitHv_qfLhEZoPJeqePLvnaBpHDoE2OR71zRwAuLBtjDs1o7YGstvW-Ru7d1pEeQ8r5gntlJq-xPeOQWivxgPQjuvzz7xN6ZYex29v9IbkVax1geY-VhkznTRKYEHE4h2rqv-tfvgKXFn12XYXvQrAulfNCishT8Tgj79v_4JRTcmG-Op0hHZSCRIcaunmPnb4AQ41NFRILU4y1_VwJfn"/>
+</div>
+</div>
+</header>
+<!-- Canvas -->
+<div class="flex-1 overflow-y-auto p-container-padding md:p-stack-lg">
+<div class="mb-stack-lg">
+<h2 class="text-headline-md font-headline-md text-on-surface">DEFENSIVE MITIGATION &amp; VALIDATION</h2>
+<p class="text-on-surface-variant text-body-base mt-2">Evaluation of applied countermeasures against Experiment ID: EXP-992</p>
+</div>
+<!-- Lifecycle Visualization -->
+<div class="soc-card rounded-lg p-stack-md mb-stack-lg">
+<div class="flex justify-between items-center mb-stack-md text-label-caps font-label-caps text-on-surface-variant">
+<span>MITIGATION LIFECYCLE</span>
+<span class="text-secondary flex items-center"><span class="material-symbols-outlined text-[14px] mr-1">check_circle</span> MITIGATED</span>
+</div>
+<div class="relative pt-2 pb-6">
+<div class="absolute top-4 left-0 w-full progress-line z-0"></div>
+<div class="flex justify-between relative z-10 w-full">
+<div class="flex flex-col items-center">
+<div class="w-8 h-8 rounded-full bg-error-container border border-error flex items-center justify-center mb-2">
+<span class="material-symbols-outlined text-error text-[16px]">warning</span>
+</div>
+<span class="text-label-caps font-label-caps text-outline text-center w-20">GAP</span>
+</div>
+<div class="flex flex-col items-center">
+<div class="w-8 h-8 rounded-full bg-surface-variant border border-outline flex items-center justify-center mb-2">
+<span class="material-symbols-outlined text-on-surface text-[16px]">edit_document</span>
+</div>
+<span class="text-label-caps font-label-caps text-outline text-center w-20">DEFENSIVE PROPOSAL</span>
+</div>
+<div class="flex flex-col items-center">
+<div class="w-8 h-8 rounded-full bg-surface-variant border border-outline flex items-center justify-center mb-2">
+<span class="material-symbols-outlined text-on-surface text-[16px]">health_and_safety</span>
+</div>
+<span class="text-label-caps font-label-caps text-outline text-center w-20">SAFETY VALIDATION</span>
+</div>
+<div class="flex flex-col items-center">
+<div class="w-8 h-8 rounded-full bg-surface-variant border border-outline flex items-center justify-center mb-2">
+<span class="material-symbols-outlined text-on-surface text-[16px]">science</span>
+</div>
+<span class="text-label-caps font-label-caps text-outline text-center w-20">DEFENSE TEST</span>
+</div>
+<div class="flex flex-col items-center">
+<div class="w-8 h-8 rounded-full bg-primary-container/20 border border-primary flex items-center justify-center mb-2">
+<span class="material-symbols-outlined text-primary text-[16px]">refresh</span>
+</div>
+<span class="text-label-caps font-label-caps text-outline text-center w-20">RETEST</span>
+</div>
+<div class="flex flex-col items-center">
+<div class="w-8 h-8 rounded-full bg-surface-variant border border-outline flex items-center justify-center mb-2">
+<span class="material-symbols-outlined text-on-surface text-[16px]">compare</span>
+</div>
+<span class="text-label-caps font-label-caps text-outline text-center w-20">BEFORE/AFTER</span>
+</div>
+<div class="flex flex-col items-center">
+<div class="w-8 h-8 rounded-full bg-secondary-container/20 border border-secondary shadow-success-glow flex items-center justify-center mb-2">
+<span class="material-symbols-outlined text-secondary text-[16px]">task_alt</span>
+</div>
+<span class="text-label-caps font-label-caps text-secondary text-center w-20">MITIGATED</span>
+</div>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-stack-md mb-stack-lg">
+<!-- Visual Comparison: BEFORE -->
+<div class="soc-card rounded-lg flex flex-col relative overflow-hidden">
+<div class="absolute top-0 left-0 w-1 h-full bg-error opacity-50"></div>
+<div class="soc-card-header p-stack-sm flex justify-between items-center px-stack-md">
+<span class="text-label-caps font-label-caps text-error">BEFORE MITIGATION</span>
+<span class="text-data-mono-sm font-data-mono-sm text-outline">T-MINUS 24H</span>
+</div>
+<div class="p-stack-md space-y-4">
+<div class="flex justify-between items-center border-b border-white/5 pb-2">
+<span class="text-label-caps font-label-caps text-outline">Detection</span>
+<span class="text-data-mono font-data-mono text-error flex items-center"><span class="material-symbols-outlined text-[16px] mr-1">close</span> NOT DETECTED</span>
+</div>
+<div class="flex justify-between items-center border-b border-white/5 pb-2">
+<span class="text-label-caps font-label-caps text-outline">Confidence</span>
+<span class="text-data-mono font-data-mono text-on-surface">0.21</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-label-caps font-label-caps text-outline">Status</span>
+<span class="text-data-mono font-data-mono bg-error-container text-on-error px-2 py-0.5 rounded text-[11px]">GAP</span>
+</div>
+</div>
+</div>
+<!-- Visual Comparison: AFTER -->
+<div class="soc-card rounded-lg flex flex-col relative overflow-hidden border-secondary/30 shadow-success-glow">
+<div class="absolute top-0 left-0 w-1 h-full bg-secondary"></div>
+<div class="soc-card-header p-stack-sm flex justify-between items-center px-stack-md border-secondary/20 bg-secondary/5">
+<span class="text-label-caps font-label-caps text-secondary">AFTER MITIGATION</span>
+<span class="text-data-mono-sm font-data-mono-sm text-secondary">CURRENT STATE</span>
+</div>
+<div class="p-stack-md space-y-4">
+<div class="flex justify-between items-center border-b border-white/5 pb-2">
+<span class="text-label-caps font-label-caps text-outline">Detection</span>
+<span class="text-data-mono font-data-mono text-secondary flex items-center"><span class="material-symbols-outlined text-[16px] mr-1">check</span> DETECTED</span>
+</div>
+<div class="flex justify-between items-center border-b border-white/5 pb-2">
+<span class="text-label-caps font-label-caps text-outline">Confidence</span>
+<span class="text-data-mono font-data-mono text-secondary">0.86</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-label-caps font-label-caps text-outline">Status</span>
+<span class="text-data-mono font-data-mono bg-secondary-container/20 border border-secondary text-secondary px-2 py-0.5 rounded text-[11px]">VERIFIED</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Remediation & Evidence Bento Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-stack-md">
+<!-- Details -->
+<div class="soc-card rounded-lg lg:col-span-1 p-stack-md flex flex-col">
+<h3 class="text-label-caps font-label-caps text-on-surface-variant mb-stack-md border-b border-white/10 pb-2">REMEDIATION DETAILS</h3>
+<div class="space-y-4 flex-1">
+<div>
+<span class="block text-label-caps font-label-caps text-outline mb-1">PROPOSAL</span>
+<span class="text-body-base text-on-surface block">Sigma Rule Update: Endpoint Service Tampering</span>
+</div>
+<div>
+<span class="block text-label-caps font-label-caps text-outline mb-1">TARGET</span>
+<span class="text-data-mono font-data-mono text-primary bg-primary/10 px-2 py-1 rounded inline-block">Windows Fleet</span>
+</div>
+<div>
+<span class="block text-label-caps font-label-caps text-outline mb-1">VALIDATION</span>
+<span class="text-data-mono font-data-mono text-secondary flex items-center"><span class="material-symbols-outlined text-[14px] mr-1">verified</span> Docker Sandbox Test PASSED</span>
+</div>
+<div>
+<span class="block text-label-caps font-label-caps text-outline mb-1">OPERATIONAL RISK</span>
+<span class="text-data-mono font-data-mono text-secondary">Low (Log-only rule)</span>
+</div>
+</div>
+</div>
+<!-- Technical Evidence -->
+<div class="soc-card rounded-lg lg:col-span-2 flex flex-col">
+<div class="soc-card-header p-stack-sm flex justify-between items-center px-stack-md">
+<span class="text-label-caps font-label-caps text-on-surface-variant">TECHNICAL EVIDENCE: DETECTION RULE</span>
+<button class="text-outline hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[18px]">content_copy</span>
+</button>
+</div>
+<div class="p-stack-md flex-1 bg-surface-container-lowest">
+<pre class="text-data-mono font-data-mono text-on-surface overflow-x-auto p-4 code-block rounded h-full text-sm leading-relaxed"><code class="language-yaml">title: Endpoint Service Tampering Detected
+id: a8b3c9d2-1e4f-5g6h-7i8j-9k0l1m2n3o4p
+status: experimental
+description: Detects attempts to stop or modify critical security services via sc.exe or net.exe.
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_process:
+        EventID: 4688
+        NewProcessName|endswith:
+            - '\sc.exe'
+            - '\net.exe'
+    selection_command:
+        CommandLine|contains:
+            - 'stop'
+            - 'config'
+            - 'delete'
+    selection_target:
+        CommandLine|contains|all:
+            - 'WinDefend'
+            - 'Sense'
+    condition: selection_process and selection_command and selection_target
+falsepositives:
+    - Legitimate administrative maintenance (rare)
+level: high
+tags:
+    - attack.defense_evasion
+    - attack.t1562.001</code></pre>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

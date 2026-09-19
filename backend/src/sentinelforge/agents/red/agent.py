@@ -461,7 +461,6 @@ class RedAgent:
 
         try:
             from sentinelforge.db.models import DetectionResult as DetectionResultRecord
-            from datetime import datetime, timezone
 
             org_id = objective.organization_id
             now = datetime.now(timezone.utc)
@@ -489,6 +488,13 @@ class RedAgent:
             self.config.db_session.commit()
         except Exception as exc:
             logger.warning("Failed to persist detection results: %s", exc)
+            try:
+                self.config.db_session.rollback()
+            except Exception as rollback_exc:
+                logger.error(
+                    "Detection results DB rollback also failed (original: %s): %s",
+                    exc, rollback_exc,
+                )
 
     def _persist_purple_evaluation(
         self,
@@ -507,7 +513,6 @@ class RedAgent:
         try:
             from sentinelforge.detection.evaluator import PurpleEvaluator
             from sentinelforge.db.models import PurpleEvaluationRecord
-            from datetime import datetime, timezone
             import json as json_lib
 
             purple_evaluator = PurpleEvaluator()
@@ -545,6 +550,13 @@ class RedAgent:
             self.config.db_session.commit()
         except Exception as exc:
             logger.warning("Failed to persist purple evaluation: %s", exc)
+            try:
+                self.config.db_session.rollback()
+            except Exception as rollback_exc:
+                logger.error(
+                    "Purple evaluation DB rollback also failed (original: %s): %s",
+                    exc, rollback_exc,
+                )
 
     def _collect_telemetry(self, execution: Any) -> List[Any]:
         """Collect telemetry for one simulation execution (Step 2B).

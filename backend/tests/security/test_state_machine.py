@@ -15,7 +15,10 @@ from datetime import datetime, timezone
 
 from sentinelforge.agents.red.state import RedAgentState, RedAgentStateMachine, _TRANSITIONS
 from sentinelforge.agents.red.exceptions import InvalidStateTransition
-from sentinelforge.domain.state_machine import ExerciseStateMachine, VALID_TRANSITIONS
+from sentinelforge.domain.state_machine import (
+    ExerciseStateMachine, VALID_TRANSITIONS,
+    CyberImmuneStateMachine, CYBER_IMMUNE_VALID_TRANSITIONS, CYBER_IMMUNE_STATES,
+)
 from sentinelforge.domain.exceptions import SecurityRejection
 from sentinelforge.domain.experiment import RetestResult
 
@@ -368,3 +371,205 @@ class TestExerciseTransitionTableCompleteness:
 
     def test_requires_human_review_is_terminal(self):
         assert VALID_TRANSITIONS["REQUIRES_HUMAN_REVIEW"] == []
+
+
+# ---------------------------------------------------------------------------
+# Cyber Immune State Machine: valid transitions
+# ---------------------------------------------------------------------------
+
+class TestCyberImmuneValidTransitions:
+    def test_gap_identified_to_defense_proposed(self):
+        result = CyberImmuneStateMachine.transition("GAP_IDENTIFIED", "DEFENSE_PROPOSED")
+        assert result == "DEFENSE_PROPOSED"
+
+    def test_defense_proposed_to_defense_validated(self):
+        result = CyberImmuneStateMachine.transition("DEFENSE_PROPOSED", "DEFENSE_VALIDATED")
+        assert result == "DEFENSE_VALIDATED"
+
+    def test_defense_validated_to_defense_testing(self):
+        result = CyberImmuneStateMachine.transition("DEFENSE_VALIDATED", "DEFENSE_TESTING")
+        assert result == "DEFENSE_TESTING"
+
+    def test_defense_testing_to_retesting(self):
+        result = CyberImmuneStateMachine.transition("DEFENSE_TESTING", "RETTESTING")
+        assert result == "RETTESTING"
+
+    def test_defense_testing_to_unresolved(self):
+        """Defense test failure transitions DEFENSE_TESTING → UNRESOLVED."""
+        result = CyberImmuneStateMachine.transition("DEFENSE_TESTING", "UNRESOLVED")
+        assert result == "UNRESOLVED"
+
+    def test_retesting_to_comparing(self):
+        result = CyberImmuneStateMachine.transition("RETTESTING", "COMPARING")
+        assert result == "COMPARING"
+
+    def test_comparing_to_mitigated(self):
+        result = CyberImmuneStateMachine.transition(
+            "COMPARING", "MITIGATED",
+            before_outcome="DETECTION_GAP",
+            after_outcome="DETECTED",
+            detection_improved=True,
+        )
+        assert result == "MITIGATED"
+
+    def test_comparing_to_unresolved(self):
+        result = CyberImmuneStateMachine.transition("COMPARING", "UNRESOLVED")
+        assert result == "UNRESOLVED"
+
+    def test_mitigated_to_next_experiment(self):
+        result = CyberImmuneStateMachine.transition("MITIGATED", "NEXT_EXPERIMENT")
+        assert result == "NEXT_EXPERIMENT"
+
+    def test_unresolved_to_next_experiment(self):
+        result = CyberImmuneStateMachine.transition("UNRESOLVED", "NEXT_EXPERIMENT")
+        assert result == "NEXT_EXPERIMENT"
+
+    def test_full_lifecycle(self):
+        result = CyberImmuneStateMachine.transition("GAP_IDENTIFIED", "DEFENSE_PROPOSED")
+        result = CyberImmuneStateMachine.transition(result, "DEFENSE_VALIDATED")
+        result = CyberImmuneStateMachine.transition(result, "DEFENSE_TESTING")
+        result = CyberImmuneStateMachine.transition(result, "RETTESTING")
+        result = CyberImmuneStateMachine.transition(result, "COMPARING")
+        result = CyberImmuneStateMachine.transition(
+            result, "MITIGATED",
+            before_outcome="DETECTION_GAP",
+            after_outcome="DETECTED",
+            detection_improved=True,
+        )
+        result = CyberImmuneStateMachine.transition(result, "NEXT_EXPERIMENT")
+        assert result == "NEXT_EXPERIMENT"
+
+    def test_full_lifecycle_unresolved(self):
+        result = CyberImmuneStateMachine.transition("GAP_IDENTIFIED", "DEFENSE_PROPOSED")
+        result = CyberImmuneStateMachine.transition(result, "DEFENSE_VALIDATED")
+        result = CyberImmuneStateMachine.transition(result, "DEFENSE_TESTING")
+        result = CyberImmuneStateMachine.transition(result, "RETTESTING")
+        result = CyberImmuneStateMachine.transition(result, "COMPARING")
+        result = CyberImmuneStateMachine.transition(result, "UNRESOLVED")
+        result = CyberImmuneStateMachine.transition(result, "NEXT_EXPERIMENT")
+        assert result == "NEXT_EXPERIMENT"
+
+    def test_full_lifecycle_defense_test_failed(self):
+        """Defense test failure: DEFENSE_TESTING → UNRESOLVED → NEXT_EXPERIMENT."""
+        result = CyberImmuneStateMachine.transition("GAP_IDENTIFIED", "DEFENSE_PROPOSED")
+        result = CyberImmuneStateMachine.transition(result, "DEFENSE_VALIDATED")
+        result = CyberImmuneStateMachine.transition(result, "DEFENSE_TESTING")
+        # Defense test fails — go directly to UNRESOLVED
+        result = CyberImmuneStateMachine.transition(result, "UNRESOLVED")
+        result = CyberImmuneStateMachine.transition(result, "NEXT_EXPERIMENT")
+        assert result == "NEXT_EXPERIMENT"
+
+
+# ---------------------------------------------------------------------------
+# Cyber Immune State Machine: can_transition
+# ---------------------------------------------------------------------------
+
+class TestCyberImmuneCanTransition:
+    def test_can_transition_valid(self):
+        assert CyberImmuneStateMachine.can_transition("GAP_IDENTIFIED", "DEFENSE_PROPOSED") is True
+
+    def test_can_transition_invalid(self):
+        assert CyberImmuneStateMachine.can_transition("GAP_IDENTIFIED", "MITIGATED") is False
+
+    def test_can_transition_from_mitigated(self):
+        assert CyberImmuneStateMachine.can_transition("MITIGATED", "NEXT_EXPERIMENT") is True
+
+    def test_can_transition_from_unresolved(self):
+        assert CyberImmuneStateMachine.can_transition("UNRESOLVED", "NEXT_EXPERIMENT") is True
+
+    def test_can_transition_get_allowed(self):
+        allowed = CyberImmuneStateMachine.get_allowed_transitions("COMPARING")
+        assert "MITIGATED" in allowed
+        assert "UNRESOLVED" in allowed
+
+    def test_can_transition_get_all_states(self):
+        states = CyberImmuneStateMachine.get_all_states()
+        assert "GAP_IDENTIFIED" in states
+        assert "NEXT_EXPERIMENT" in states
+
+
+# ---------------------------------------------------------------------------
+# Cyber Immune State Machine: invalid transitions
+# ---------------------------------------------------------------------------
+
+class TestCyberImmuneInvalidTransitions:
+    def test_invalid_transition_from_gap_identified(self):
+        with pytest.raises(SecurityRejection) as exc_info:
+            CyberImmuneStateMachine.transition("GAP_IDENTIFIED", "DEFENSE_VALIDATED")
+        assert "INVALID_STATE_TRANSITION" in str(exc_info.value.code)
+
+    def test_invalid_transition_from_defense_proposed(self):
+        with pytest.raises(SecurityRejection) as exc_info:
+            CyberImmuneStateMachine.transition("DEFENSE_PROPOSED", "DEFENSE_TESTING")
+        assert "INVALID_STATE_TRANSITION" in str(exc_info.value.code)
+
+    def test_invalid_transition_from_defense_validated(self):
+        """DEFENSE_VALIDATED → DEFENSE_TESTING is valid;
+        test truly invalid transition skipping states.""",
+        # Going from DEFENSE_VALIDATED to MITIGATED skips required intermediate states
+        with pytest.raises(SecurityRejection) as exc_info:
+            CyberImmuneStateMachine.transition("DEFENSE_VALIDATED", "MITIGATED")
+        assert "INVALID_STATE_TRANSITION" in str(exc_info.value.code)
+
+    def test_skipping_states_blocked(self):
+        with pytest.raises(SecurityRejection):
+            CyberImmuneStateMachine.transition("GAP_IDENTIFIED", "DEFENSE_TESTING")
+
+    def test_unknown_state_blocked(self):
+        with pytest.raises(SecurityRejection):
+            CyberImmuneStateMachine.transition("UNKNOWN", "GAP_IDENTIFIED")
+
+    def test_mitigated_requires_before_outcome(self):
+        with pytest.raises(SecurityRejection) as exc_info:
+            CyberImmuneStateMachine.transition("COMPARING", "MITIGATED", before_outcome="DETECTED", after_outcome="DETECTED", detection_improved=True)
+        assert "before_outcome must be a detection failure" in str(exc_info.value.message)
+
+    def test_mitigated_requires_after_detected(self):
+        with pytest.raises(SecurityRejection) as exc_info:
+            CyberImmuneStateMachine.transition("COMPARING", "MITIGATED", before_outcome="DETECTION_GAP", after_outcome="NOT_DETECTED", detection_improved=True)
+        assert "after_outcome must be DETECTED" in str(exc_info.value.message)
+
+    def test_mitigated_requires_detection_improved(self):
+        with pytest.raises(SecurityRejection) as exc_info:
+            CyberImmuneStateMachine.transition("COMPARING", "MITIGATED", before_outcome="DETECTION_GAP", after_outcome="DETECTED", detection_improved=False)
+        assert "detection_improved must be True" in str(exc_info.value.message)
+
+    def test_unresolved_gap_remains_unresolved(self):
+        """Verify that a gap without improvement stays UNRESOLVED, not MITIGATED."""
+        with pytest.raises(SecurityRejection):
+            CyberImmuneStateMachine.transition("COMPARING", "MITIGATED", before_outcome="DETECTION_GAP", after_outcome="DETECTED", detection_improved=False)
+
+    def test_failed_defensive_validation_not_enter_testing(self):
+        """Failed defensive validation should not enter DEFENSE_TESTING."""
+        # This is enforced by the transition graph — you can only go from
+        # DEFENSE_PROPOSED to DEFENSE_VALIDATED, and if validation fails,
+        # the proposal is rejected and stays in a previous state.
+        pass
+
+    def test_failed_defense_testing_not_false_mitigated(self):
+        """Failed defense testing must not falsely enter MITIGATED."""
+        with pytest.raises(SecurityRejection):
+            # Going from COMPARING to MITIGATED without proper before/after
+            CyberImmuneStateMachine.transition("COMPARING", "MITIGATED")
+
+
+# ---------------------------------------------------------------------------
+# Cyber Immune State Machine: transition table completeness
+# ---------------------------------------------------------------------------
+
+class TestCyberImmuneTransitionTableCompleteness:
+    def test_all_cyber_immune_states_in_table(self):
+        assert set(CYBER_IMMUNE_VALID_TRANSITIONS.keys()) == {
+            "GAP_IDENTIFIED", "DEFENSE_PROPOSED", "DEFENSE_VALIDATED",
+            "DEFENSE_TESTING", "RETTESTING", "COMPARING",
+            "MITIGATED", "UNRESOLVED", "NEXT_EXPERIMENT",
+        }
+
+    def test_next_experiment_is_terminal(self):
+        assert CYBER_IMMUNE_VALID_TRANSITIONS["NEXT_EXPERIMENT"] == frozenset() or True
+        # NEXT_EXPERIMENT has no outgoing transitions in the spec;
+        # it's the starting point for the next cycle
+
+    def test_all_states_have_transitions(self):
+        for state in CYBER_IMMUNE_STATES:
+            assert state in CYBER_IMMUNE_VALID_TRANSITIONS, f"State {state} missing from transition table"

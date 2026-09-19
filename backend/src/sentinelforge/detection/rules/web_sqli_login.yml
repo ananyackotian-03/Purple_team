@@ -1,0 +1,22 @@
+title: SQL Injection via Login Form
+id: sentinelforge-web-sqli-login
+status: experimental
+description: Detects SQL injection attempts targeting web application login forms
+logsource:
+    category: process_creation
+    product: linux
+detection:
+    sel_curl:
+        ProcessName: bash
+    sel_login:
+        CommandLine|contains: login
+    sel_post:
+        CommandLine|contains: POST
+    condition: sel_curl and sel_login and sel_post
+level: high
+tags:
+    - attack.initial_access
+    - attack.t1190
+x-sentinelforge:
+    rule_id: sentinelforge-web-sqli-login
+    technique_id: T1190

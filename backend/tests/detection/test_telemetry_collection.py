@@ -375,7 +375,7 @@ class FakeAdapter(SimulationAdapter):
 
 
 def _make_worker(session, adapter=None):
-    signer = BlueprintSigner("sentinelforge-secret-key-v1", "key1")
+    signer = BlueprintSigner("sentinelforge-test-signing-key-not-for-production", "key1")
     repo = SimulationRepository(session)
     return SimulationWorker(signer=signer, repo=repo, db_session=session, adapter=adapter)
 

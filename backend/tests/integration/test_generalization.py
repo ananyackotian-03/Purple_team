@@ -48,7 +48,7 @@ def login():
         username = request.form.get("username", "")
         password = request.form.get("password", "")
         conn = get_db()
-        query = f"SELECT * FROM users WHERE username='"'"'{username}'"'"' AND password='"'"'{password}'"'"'"
+        query = f"SELECT * FROM users WHERE username='{username}' AND password='{password}'"
         try: user = conn.execute(query).fetchone()
         except: user = None
         if user: return "Welcome, " + user["username"]
@@ -101,7 +101,7 @@ def authenticate():
     if not email or not password:
         return jsonify({"error": "required"}), 400
     conn = get_db()
-    query = f"SELECT * FROM accounts WHERE email='"'"'{email}'"'"' AND password='"'"'{password}'"'"'"
+    query = f"SELECT * FROM accounts WHERE email='{email}' AND password='{password}'"
     try: account = conn.execute(query).fetchone()
     except: account = None
     if account:

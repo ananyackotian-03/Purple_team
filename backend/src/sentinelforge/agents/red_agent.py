@@ -152,6 +152,79 @@ STRATEGY_CATALOG: Dict[str, dict] = {
             },
         ],
     },
+    # --- Web Application Testing Strategies (Upgrade 5) ---
+    "web_sql_injection_login": {
+        "title": "SQL Injection via Login Form",
+        "description": "Tests SQL injection vulnerability in the login endpoint of the controlled vulnerable web application.",
+        "technique_ids": ["T1190"],  # Exploit Public-Facing Application
+        "proposed_risk_level": RiskLevel.MEDIUM,
+        "actions": [
+            {
+                "target": "sentinelforge-target",
+                "run_as_user": "labuser",
+                "executable": "/usr/bin/bash",
+                "arguments": [
+                    "-c",
+                    "curl -s -X POST http://vulnerable-app:5000/login -d \"username=admin&password=admin123\"",
+                ],
+                "technique_id": "T1190",
+            }
+        ],
+    },
+    "web_command_injection": {
+        "title": "Command Injection via Ping Endpoint",
+        "description": "Tests command injection vulnerability in the ping endpoint of the controlled vulnerable web application.",
+        "technique_ids": ["T1059"],  # Command and Scripting Interpreter
+        "proposed_risk_level": RiskLevel.MEDIUM,
+        "actions": [
+            {
+                "target": "sentinelforge-target",
+                "run_as_user": "labuser",
+                "executable": "/usr/bin/bash",
+                "arguments": [
+                    "-c",
+                    "curl -s -X POST http://vulnerable-app:5000/api/ping -H Content-Type: application/json -d {\"host\":\"127.0.0.1\"}",
+                ],
+                "technique_id": "T1059",
+            }
+        ],
+    },
+    "web_path_traversal": {
+        "title": "Path Traversal via File Read Endpoint",
+        "description": "Tests path traversal vulnerability in the file read endpoint of the controlled vulnerable web application.",
+        "technique_ids": ["T1083"],  # File and Directory Discovery
+        "proposed_risk_level": RiskLevel.MEDIUM,
+        "actions": [
+            {
+                "target": "sentinelforge-target",
+                "run_as_user": "labuser",
+                "executable": "/usr/bin/bash",
+                "arguments": [
+                    "-c",
+                    "curl -s -X POST http://vulnerable-app:5000/api/files/read -H Content-Type: application/json -d {\"path\":\"/etc/hostname\"}",
+                ],
+                "technique_id": "T1083",
+            }
+        ],
+    },
+    "web_search_sqli": {
+        "title": "SQL Injection via Search API",
+        "description": "Tests SQL injection vulnerability in the search endpoint of the controlled vulnerable web application.",
+        "technique_ids": ["T1190"],
+        "proposed_risk_level": RiskLevel.MEDIUM,
+        "actions": [
+            {
+                "target": "sentinelforge-target",
+                "run_as_user": "labuser",
+                "executable": "/usr/bin/bash",
+                "arguments": [
+                    "-c",
+                    "curl -s -X POST http://vulnerable-app:5000/api/search -H Content-Type: application/json -d {\"q\":\"test\"}",
+                ],
+                "technique_id": "T1190",
+            }
+        ],
+    },
 }
 
 
@@ -189,10 +262,12 @@ class RedAgentPlanner:
         self,
         signer: Optional[BlueprintSigner] = None,
         safety_boundary: Optional[ExperimentSafetyBoundary] = None,
-        signing_key: str = "sentinelforge-secret-key-v1",
+        signing_key: Optional[str] = None,
         key_id: str = "key1",
     ):
-        self.signer = signer or BlueprintSigner(key=signing_key, key_id=key_id)
+        from sentinelforge.agents.red.policies import _resolve_signing_key
+        resolved_key = _resolve_signing_key(signing_key=signing_key, signer=signer)
+        self.signer = signer or BlueprintSigner(key=resolved_key, key_id=key_id)
         self.default_safety_boundary = safety_boundary or ExperimentSafetyBoundary()
 
     def plan_scenario(

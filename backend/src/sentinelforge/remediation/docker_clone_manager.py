@@ -129,7 +129,7 @@ WORKDIR /app
 COPY . .
 RUN pip install --no-cache-dir flask 2>/dev/null || true
 EXPOSE 5000
-CMD ["python", "app.py"]
+CMD ["python", "-c", "import app; a = getattr(app, 'app', None); a.run(host='0.0.0.0', port=5000) if a else None"]
 """
             with open(os.path.join(tmp_dir, "Dockerfile"), "w") as f:
                 f.write(dockerfile_content)
@@ -400,6 +400,20 @@ CMD ["python", "app.py"]
             logger.warning(f"Docker cleanup failed: {exc}")
             success = False
         return success
+
+    def _docker_health_check(self, container_name: str) -> bool:
+        """Check if a Docker container is actively running."""
+        import subprocess
+        try:
+            res = subprocess.run(
+                ["docker", "inspect", "--format", "{{.State.Running}}", container_name],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            return res.returncode == 0 and res.stdout.strip().lower() == "true"
+        except Exception:
+            return False
 
     def health_check(self, clone: TargetClone) -> bool:
         """Check if clone is running."""

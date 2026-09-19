@@ -247,7 +247,6 @@ class CloneRemediationExecutor:
 import ast, sys
 with open('app.py') as f:
     tree = ast.parse(f.read())
-# Check that login route still exists
 has_login = False
 has_index = False
 for node in ast.walk(tree):

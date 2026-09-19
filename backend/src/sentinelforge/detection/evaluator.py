@@ -20,6 +20,12 @@ import logging
 from typing import Dict, List, Optional, Set, Union
 from uuid import UUID, uuid4
 
+
+def _utc_now_iso() -> str:
+    """Return a compliant ISO 8601 UTC timestamp with 'Z' suffix."""
+    now = datetime.now(timezone.utc)
+    return now.strftime("%Y-%m-%dT%H:%M:%S.") + f"{now.microsecond // 1000:03d}Z"
+
 from sentinelforge.domain.action_ir import ActionIR
 from sentinelforge.detection.normalizer import NormalizedEvent
 from sentinelforge.detection.sigma_engine import SigmaEngine, DetectionOutcome, DetectionResult
@@ -36,7 +42,7 @@ class ActionDetectionOutcome:
     matched_rule_ids: List[str] = field(default_factory=list)
     evidence_event_ids: List[str] = field(default_factory=list)
     reason: str = ""
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat() + "Z")
+    timestamp: str = field(default_factory=_utc_now_iso)
 
     def to_dict(self) -> dict:
         """Serialize outcome to a clean dictionary for Phase 5 consumption."""
@@ -54,7 +60,7 @@ class ScenarioDetectionOutcome:
     action_outcomes: List[ActionDetectionOutcome] = field(default_factory=list)
     gap_action_ids: List[str] = field(default_factory=list)
     reason: str = ""
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat() + "Z")
+    timestamp: str = field(default_factory=lambda: _utc_now_iso())
 
     def to_dict(self) -> dict:
         """Serialize scenario outcome to a clean dictionary for Phase 5 consumption."""
@@ -99,7 +105,7 @@ class DetectionGapEvaluator:
         """
         action_id_str = str(action.action_id)
         expected_tech_id = str(action.technique_id).strip()
-        ts_now = datetime.now(timezone.utc).isoformat() + "Z"
+        ts_now = _utc_now_iso()
         target_corr = str(correlation_id).strip() if correlation_id else None
 
         # 1. Filter events based on correlation ID (Scenario Isolation)
@@ -221,7 +227,7 @@ class DetectionGapEvaluator:
         """
         scenario_id_str = str(scenario_id)
         org_id_str = str(organization_id) if organization_id else None
-        ts_now = datetime.now(timezone.utc).isoformat() + "Z"
+        ts_now = _utc_now_iso()
 
         if not actions:
             return ScenarioDetectionOutcome(
@@ -354,7 +360,7 @@ class PurpleEvaluation:
     expected_detection: bool = False
     gap_reason: Optional[str] = None
     detection_latency_ms: Optional[float] = None
-    evaluated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat() + "Z")
+    evaluated_at: str = field(default_factory=lambda: _utc_now_iso())
 
     def to_dict(self) -> dict:
         return {
@@ -389,7 +395,7 @@ class CoverageReport:
     coverage_pct: float
     technique_coverage: Dict[str, bool] = field(default_factory=dict)
     evaluations: List[PurpleEvaluation] = field(default_factory=list)
-    generated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat() + "Z")
+    generated_at: str = field(default_factory=lambda: _utc_now_iso())
 
     def to_dict(self) -> dict:
         return {
@@ -401,7 +407,7 @@ class CoverageReport:
             "gap_experiments": self.gap_experiments,
             "coverage_pct": self.coverage_pct,
             "technique_coverage": self.technique_coverage,
-            "evaluated_at": self.generated_at,
+            "generated_at": self.generated_at,
         }
 
 
@@ -438,7 +444,7 @@ class PurpleEvaluator:
         """
         org_id = str(scenario_outcome.organization_id) if scenario_outcome.organization_id else ""
         scenario_id = str(scenario_outcome.scenario_id)
-        ts_now = datetime.now(timezone.utc).isoformat() + "Z"
+        ts_now = _utc_now_iso()
 
         # Aggregate matched rules and evidence from ALL action outcomes
         all_matched_rules: List[str] = []
@@ -472,12 +478,18 @@ class PurpleEvaluator:
         if scenario_outcome.action_outcomes:
             try:
                 first_ts = scenario_outcome.action_outcomes[0].timestamp
-                # Strip trailing "Z" if present, as fromisoformat handles +00:00
-                ts_clean = first_ts.rstrip("Z")
-                now_clean = ts_now.rstrip("Z")
-                start = datetime.fromisoformat(ts_clean)
-                end = datetime.fromisoformat(now_clean)
-                latency_ms = (end - start).total_seconds() * 1000
+                # Parse timestamps, handling Z-suffixed, +00:00, and legacy +00:00Z formats
+                def _parse_ts(ts_str: str) -> datetime:
+                    # Remove trailing Z to avoid double-offset with legacy +00:00Z format
+                    clean = ts_str.rstrip("Z")
+                    dt = datetime.fromisoformat(clean)
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    return dt
+
+                start = _parse_ts(first_ts)
+                end = _parse_ts(ts_now)
+                latency_ms = max(0.0, (end - start).total_seconds() * 1000)
             except (ValueError, TypeError):
                 latency_ms = None
 

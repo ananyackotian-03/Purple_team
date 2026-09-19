@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, ForeignKey, Boolean, Integer, Text
+from sqlalchemy import Column, String, DateTime, ForeignKey, Boolean, Integer, Text, JSON
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
@@ -10,6 +10,14 @@ class Organization(Base):
     __tablename__ = 'organizations'
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    defensive_state = Column(String, nullable=False, default="INITIAL")
+    assets = Column(JSON, nullable=True, default=dict)
+    security_controls = Column(JSON, nullable=True, default=dict)
+    detection_rules = Column(JSON, nullable=True, default=dict)
+    experiment_summary = Column(JSON, nullable=True, default=dict)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow)
 
 class User(Base):
     __tablename__ = 'users'

@@ -29,7 +29,7 @@ from sentinelforge.simulation.worker import SimulationWorker
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-SIGNER_KEY = "sentinelforge-secret-key-v1"
+SIGNER_KEY = "sentinelforge-test-signing-key-not-for-production"
 SIGNER_KEY_ID = "key1"
 ORG_ID = uuid.UUID(int=0) if False else uuid4()
 

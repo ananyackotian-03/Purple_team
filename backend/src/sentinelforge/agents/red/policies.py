@@ -12,6 +12,8 @@ This is the SINGLE mandatory gate between Tier 1 (LLM proposals) and Tier 2
 If any action is denied, NO blueprints are signed (fail-closed, atomic).
 """
 
+import logging
+import os
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
@@ -30,8 +32,38 @@ from sentinelforge.domain.experiment import (
 from sentinelforge.policy.safety_boundary import ExperimentSafetyBoundary
 from sentinelforge.policy.signing import BlueprintSigner
 
+logger = logging.getLogger(__name__)
+
 # Default validity window for generated blueprints.
 BLUEPRINT_VALIDITY_SECONDS = 30
+
+
+def _resolve_signing_key(
+    signing_key: Optional[str] = None,
+    signer: Optional[BlueprintSigner] = None,
+) -> str:
+    """Resolve the signing key from explicit argument, signer, or environment.
+
+    Priority:
+      1. Explicit signing_key argument
+      2. Key extracted from an existing signer instance
+      3. SENTINELFORGE_SIGNING_KEY environment variable
+
+    Raises:
+        ProviderConfigurationError: If no signing key can be resolved.
+    """
+    if signing_key is not None:
+        return signing_key
+    if signer is not None:
+        # Extract key from existing signer (encoded bytes -> str)
+        return signer.key.decode("utf-8") if isinstance(signer.key, bytes) else signer.key
+    env_key = os.environ.get("SENTINELFORGE_SIGNING_KEY")
+    if env_key:
+        return env_key
+    raise ValueError(
+        "Signing key is required. Provide signing_key, a signer instance, "
+        "or set the SENTINELFORGE_SIGNING_KEY environment variable."
+    )
 
 
 @dataclass
@@ -71,10 +103,11 @@ class SafetyBoundaryBridge:
         signer: Optional[BlueprintSigner] = None,
         safety_boundary: Optional[ExperimentSafetyBoundary] = None,
         constraints: Optional[ExperimentConstraints] = None,
-        signing_key: str = "sentinelforge-secret-key-v1",
+        signing_key: Optional[str] = None,
         key_id: str = "key1",
     ):
-        self.signer = signer or BlueprintSigner(key=signing_key, key_id=key_id)
+        resolved_key = _resolve_signing_key(signing_key=signing_key, signer=signer)
+        self.signer = signer or BlueprintSigner(key=resolved_key, key_id=key_id)
         if safety_boundary is not None:
             self.boundary = safety_boundary
         else:

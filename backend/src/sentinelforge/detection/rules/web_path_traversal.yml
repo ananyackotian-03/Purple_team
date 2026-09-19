@@ -1,0 +1,22 @@
+title: Path Traversal via Web Application
+id: sentinelforge-web-path-traversal
+status: experimental
+description: Detects path traversal attempts targeting web application file read endpoints
+logsource:
+    category: process_creation
+    product: linux
+detection:
+    sel_curl:
+        ProcessName: bash
+    sel_files:
+        CommandLine|contains: api/files/read
+    sel_post:
+        CommandLine|contains: POST
+    condition: sel_curl and sel_files and sel_post
+level: high
+tags:
+    - attack.discovery
+    - attack.t1083
+x-sentinelforge:
+    rule_id: sentinelforge-web-path-traversal
+    technique_id: T1083
