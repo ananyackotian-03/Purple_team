@@ -1,31 +1,28 @@
-# SENTINELFORGE — TODO NEXT
+# SENTINELFORGE — TODO NEXT & HANDOVER ROADMAP
 
-## Current Milestone: COMPLETE
-Real Docker Isolation + Clone-Only Remediation + E2E Security Validation
+## Current Milestone: COMPLETE (Core Platform, API & UI Dashboard)
+- Autonomous Immune Cycle Orchestrator implemented
+- Digital Twin Engine & Service Registration implemented
+- FastAPI REST API Backend implemented (`backend/src/sentinelforge/api/`)
+- Full React 18 + Vite + TypeScript UI Dashboard implemented (`frontend/`)
+- All 100+ backend domain & security tests + frontend Vitest suites passing
 
-## Status: DOCKER-DAEMON-BLOCKED
-- Docker E2E tests written and verified (correctly skip when daemon unavailable)
-- All existing 394 tests passing
-- Docker Desktop installed but daemon not started
+## Detailed Handover Guide
+- See [`HANDOVER_GUIDE.md`](file:///c:/Users/anany/Project/Purple/HANDOVER_GUIDE.md) for full architecture breakdown, setup commands, and directory layouts.
 
-## To Enable Docker E2E
-1. Start Docker Desktop
-2. Run: `pytest tests/integration/test_docker_e2e.py -v`
-3. All 10 Docker tests should pass
+## Remaining Completion Steps
 
-## Remaining Work
+### 1. Live LLM Execution (Optional / Production)
+- Install SDK: `pip install openai` (or `anthropic` / `google-generativeai`)
+- Set environment variable: `SENTINELFORGE_LLM_PROVIDER=openai`
+- Set API key: `OPENAI_API_KEY=sk-...` (or local Ollama URL)
+- Run: `pytest backend/tests/integration/test_e2e_real_llm.py -v`
 
-### To Enable Live LLM
-1. Install SDK: `pip install openai` or `pip install anthropic`
-2. Set environment variable: `SENTINELFORGE_LLM_PROVIDER=openai`
-3. Set API key: `OPENAI_API_KEY=sk-...`
-4. Run: `pytest tests/integration/test_e2e_real_llm.py -v`
+### 2. Live Docker Container Clone Validation
+- Start Docker Desktop daemon
+- Run: `pytest backend/tests/integration/test_docker_e2e.py -v`
 
-### Future Enhancements (Not in Current Scope)
-- [ ] Falco/eBPF telemetry (requires Linux environment)
-- [ ] Cross-session novelty seeding
-- [ ] Production PostgreSQL deployment
-- [ ] Blue LLM Agent
-- [ ] Multi-vulnerability classes
-- [ ] Dashboard/UI
-- [ ] Production deployment
+### 3. Production Deployment
+- Frontend static build: `cd frontend && npm run build`
+- Database migration (if connecting PostgreSQL): `cd backend && alembic upgrade head`
+
